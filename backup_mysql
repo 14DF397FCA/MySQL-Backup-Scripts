@@ -1,0 +1,79 @@
+#!/bin/bash
+
+#	Author - Gennadiy Ilyashenko (sigismund.freud@gmail.com)
+
+DBHOST='127.0.0.1'
+DBUSER='root'
+DBPASS='<mysql_root_password>'
+DBPORT=<mysql_port>
+DBNAME=<name_of_database>
+
+BKPPATH='/data/backup/'
+STORAGE='/mnt/backup/'
+TMPPATH='/tmp/'$DBNAME'/'
+TABLES=$TMPPATH'tables-list.txt'
+HOSTNAME=`/bin/hostname`
+FULLNAME=$HOSTNAME$'_'$DBNAME
+SENDER='senders-email@your-mail-domain.com'
+RECIPIENT='recipient-of-message@your-mail-domain.com'
+PHONES='123456789@sms.beemail.ru'
+SUBJECT_OK='Backup '$HOSTDBNAME' OK!'
+SUBJECT_FAIL='Backup '$HOSTDBNAME' FAIL! Check your e-mail for detail!'
+MESSAGE_OK='Backup '$HOSTDBNAME' successfully. See attachment for detail.'
+MESSAGE_FAIL='Some errors was corrupted with '$HOSTDBNAME' backup. See attachement for detail!'
+SENDEMAIL='/usr/local/bin/sendEmail -q -s <ip_address_of_your_mail_server> -f '$SENDER
+PACK=$BKPPATH$HOSTDBNAME'-'`/bin/date +%Y-%m-%d`'.7z'
+DST=$STORAGE`basename $PACK`
+
+LOGFILE='/var/log/backup_'`date +%F`'_'$DBNAME'.log'
+
+echo -e `date +%F%t%T%t`'Start backup database '$HOSTNAME >> $LOGFILE
+echo -e '' >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database host:\t\t'$DBNAME >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database port:\t\t'$DBPORT >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database name:\t\t'$DBNAME >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database user:\t\t'$DBUSER >> $LOGFILE
+echo -e '' >> $LOGFILE
+echo -e `date +%F%t%T%t`'Backup folder:\t\t'$BKPPATH >> $LOGFILE
+echo -e `date +%F%t%T%t`'Remote folder:\t\t'$STORAGE >> $LOGFILE
+echo -e `date +%F%t%T%t`'Tempotary folder:\t\t'$TMPPATH >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database archive name:\t'$PACK >> $LOGFILE
+echo -e '' >> $LOGFILE
+echo -e `date +%F%t%T%t`'List of tables in database:\t'$TABLES >> $LOGFILE
+
+echo -e `date +%F%t%T%t`'Create temp folder '$TMPPATH >> $LOGFILE
+/bin/mkdir -p $TMPPATH
+
+echo -e `date +%F%t%T%t`'Start getting tables in the database' >> $LOGFILE
+/usr/bin/mysql -u$DBUSER -p$DBPASS -h$DBHOST -P$DBPORT -e 'use '$DBNAME'; show tables;' | /usr/bin/tail -n +2 > $TABLES
+echo -e `date +%F%t%T%t`'List of tables in the database obtained' >> $LOGFILE
+
+echo -e `date +%F%t%T%t`'Start backup database '$DBNAME' per tables' >> $LOGFILE
+for table in `/bin/cat $TABLES`
+do
+	echo -e `date +%F%t%T%t`'Start backup table '$table >> $LOGFILE
+        /usr/bin/mysqldump -u$DBUSER -p$DBPASS -h$DBHOST -P$DBPORT --routines --disable-keys --add-drop-table $DBNAME $table -r $TMPPATH$DBNAME'.'$table'.sql'
+	echo -e `date +%F%t%T%t`'Finish backup table' >> $LOGFILE
+done
+echo -e `date +%F%t%T%t`'Finish backup database per table' >> $LOGFILE
+echo -e `date +%F%t%T%t`'Start packing database '$DBNAME >> $LOGFILE
+/usr/bin/7z a -mx=5 $PACK $TMPPATH | /bin/grep 'Everything is Ok' > /dev/null 2>&1
+echo -e `date +%F%t%T%t`'Finish packing database' >> $LOGFILE
+RESULT=$?
+echo -e `date +%F%t%T%t`'Start to transfer the archive '$PACK' to the repository '$DST  >> $LOGFILE
+if [[ $RESULT -eq 0 ]]; then
+	mv $PACK $STORAGE
+	echo -e `date +%F%t%T%t`'Transfer the archive to store completed' >> $LOGFILE
+	echo -e `date +%F%t%T%t`'Start testing archive correctly after moving the archive' >> $LOGFILE
+	7z t $DST | grep 'Everything is Ok' > /dev/null 2>&1
+	echo -e `date +%F%t%T%t`'Closing testing archive' >> $LOGFILE
+	RESULT=$?
+	if [[ $RESULT -eq 0 ]]; then
+		#$sendemail -f $SENDER -t $PHONES -m $SUBJECT_OK
+		$sendemail -f $SENDER -t $RECIPIENT -u $SUBJECT_OK  -m $MESSAGE_OK -a $TABLES -a $LOGFILE
+	else
+		$sendemail -f $SENDER -t $PHONES -m $SUBJECT_FAIL
+		$sendemail -f $SENDER -t $RECIPIENT -u $SUBJECT_FAIL  -m $MESSAGE_FAIL -a $TABLES -$LOGFILE
+	fi
+	rm -rf $TMPPATH
+fi

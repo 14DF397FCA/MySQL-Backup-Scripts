@@ -1,0 +1,101 @@
+#!/bin/bash
+
+#	Author - Gennadiy Ilyashenko (sigismund.freud@gmail.com)
+
+HOSTNAME=`hostname`
+
+DBHOST='127.0.0.1'
+DBUSER='root'
+DBPASS='<mysql_root_password>'
+DBPORT=<mysql_port>
+DBNAME=<name_of_database>
+
+FULLNAME=$HOSTNAME$'_'$DBNAME
+SENDER='senders-email@your-mail-domain.com'
+RECIPIENT='recipient-of-message@your-mail-domain.com'
+PHONES='123456789@sms.beemail.ru'
+SUBJECT_OK='Restore '$DBNAME' OK!'
+SUBJECT_FAIL='Restore '$DBNAME' FAIL! Check your e-mail for detail!'
+MESSAGE_OK='Restore '$DBNAME' successfully. See attachment for detail.'
+MESSAGE_FAIL='Some errors was corrupted with '$DBNAME' restore. See attachement for detail!'
+SENDEMAIL='/usr/local/bin/sendEmail -q -s <ip_address_of_your_mail_server> -f '$SENDER
+SOURCESERVER='<your_server_name>'
+SOURCEFILE='/mnt/backup/'$SOURCESERVER'_'$DBNAME'-'`date +%F`'.7z'
+TEMPFOLDER='/tmp/'
+TEMPFILE=$TEMPFOLDER`basename $SOURCEFILE`
+TABLES=$TEMPFOLDER$DBNAME'/'
+TABLESLIST=$TABLES'tables-list.txt'
+
+LOGFILE='/var/log/autorestore_'`date +%F`'_'$DBNAME'.log'
+
+N=0
+QUERIES[N=$N+1]='SELECT COUNT(*) > 1000 FROM table_1;'
+QUERIES[N=$N+1]='SELECT COUNT(*) > 18000 FROM table_2;'
+QUERIES[N=$N+1]='SELECT count(*) > 45000 FROM table_3;'
+QUERIES[N=$N+1]='SELECT count(*) > 217000 FROM table_4;'
+QUERIES[N=$N+1]='SELECT COUNT(*) > 800000 FROM table_5;'
+QUERIES[N=$N+1]='SELECT COUNT(*) > 10 FROM table_6;'
+QUERIES[N=$N+1]='SELECT DATEDIFF(CURDATE(), MAX(date)) <= 1 FROM table_7;'
+ID=1
+ERRORCOUNT=0
+
+echo -e `date +%F%t%T%t`'Start autorestore database '$DBNAME' per table' >> $LOGFILE
+echo -e '' >> $LOGFILE
+echo -e 'Variables' >> $LOGFILE
+echo -e `date +%F%t%T%t`'Server name:\t\t'$HOSTNAME >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database address:\t\t'$DBHOST >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database user:\t\t'$DBUSER >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database port:\t\t'$DBPORT >> $LOGFILE
+echo -e `date +%F%t%T%t`'Database name:\t\t'$DBNAME >> $LOGFILE
+echo -e `date +%F%t%T%t`'Source server:\t\t'$SOURCESERVER >> $LOGFILE
+echo -e `date +%F%t%T%t`'Source file:\t\t'$SOURCEFILE >> $LOGFILE
+echo -e `date +%F%t%T%t`'Temp folder:\t\t'$TEMPFOLDER >> $LOGFILE
+echo -e `date +%F%t%T%t`'Tables folder:\t\t'$TABLES >> $LOGFILE
+echo -e `date +%F%t%T%t`'Tables list:\t\t'$TABLESLIST >> $LOGFILE
+
+echo -e '' >> $LOGFILE
+echo -e `date +%F%t%T%t`'Start copy file '$SOURCEFILE' to temp directory '$TEMPFILE >> $LOGFILE
+cp $SOURCEFILE $TEMPFILE
+echo -e `date +%F%t%T%t`'Finish copy file' >> $LOGFILE
+
+echo -e `date +%F%t%T%t`'Start extract tables from '$SOURCEFILE' to '$TEMPFOLDER >> $LOGFILE
+7z x $TEMPFILE -o$TEMPFOLDER | grep 'Everything is Ok' > /dev/null 2>&1
+RESULT=$1
+echo -e `date +%F%t%T%t`'Finish extracting' >> $LOGFILE
+
+if [[ $RESULT -eq 0 ]]; then
+	echo -e `date +%F%t%T%t`'Create empty database '$DBNAME >> $LOGFILE
+	mysql -u$DBUSER -p$DBPASS -h$DBHOST -P$DBPORT -e "CREATE DATABASE $DBNAME;"
+	echo -e `date +%F%t%T%t`'Start restore tables of database '$DBNAME >> $LOGFILE
+	for TABLENAME in `cat $TABLESLIST`
+	do
+		echo -e `date +%F%t%T%t`'Start restore table '$DBNAME'.'$TABLENAME >> $LOGFILE
+		mysql -u$DBUSER -p$DBPASS -h$DBHOST -P$DBPORT $DBNAME < $TABLES$DBNAME'.'$TABLENAME'.sql'
+		echo -e `date +%F%t%T%t`'Finish restore table '$DBNAME'.'$TABLENAME >> $LOGFILE
+	done
+	echo -e `date +%F%t%T%t`'Start testing restored databases by queries' >> $LOGFILE
+	while [ "$ID" -le "$N" ];
+	do
+		QUERY="${QUERIES[ID]}"
+		RESULT=`mysql -u$DBUSER -p$DBPASS -h$DBHOST -P$DBPORT -e "USE $DBNAME; $QUERY" | tee | tail -n 1`
+		if [[ $RESULT -ne 1 ]]; then
+			let "ERRORCOUNT=$ERRORCOUNT+1"
+			echo -e `date +%F%t%T%t`'Error while query '$QUERY >> $LOGFILE
+		fi
+		unset QUERY
+		unset RESULT
+		let "ID=$ID+1"
+	done
+	echo -e `date +%F%t%T%t`'Finish testing databases' >> $LOGFILE
+	echo -e `date +%F%t%T%t`'Remove tables folder '$TABLES >> $LOGFILE
+	rm -rf $TABLES
+	echo -e `date +%F%t%T%t`'Remove temp file '$TEMPFILE >> $LOGFILE
+	rm $TEMPFILE
+	if [[ $ERRORCOUNT -ne 0 ]]; then
+		$SENDEMAIL -t $PHONES -m $SUBJECT_FAIL
+		$SENDEMAIL -t $RECIPIENT -u $SUBJECT_FAIL -m $MESSAGE_FAIL -a $LOGFILE
+	else
+		#$SENDEMAIL -t $PHONES -m $SUBJECT_OK
+		$SENDEMAIL -t $RECIPIENT -u $SUBJECT_OK -m $MESSAGE_OK -a $LOGFILE
+	fi
+fi
