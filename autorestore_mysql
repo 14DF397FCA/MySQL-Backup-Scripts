@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#	Author - Gennadiy Ilyashenko (sigismund.freud@gmail.com)
+#	Author - Gennadiy Ilyashenko (ilyashenko.g@yandex.ru)
 
 HOSTNAME=`hostname`
 
