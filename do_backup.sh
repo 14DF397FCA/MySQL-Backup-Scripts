@@ -5,7 +5,7 @@ BACKUP_USER="cumnsee_backup"
 #   File with password for BACKUP_USER
 BACKUP_PASSWORD_FILE="/etc/my.cnf.d/.pass"
 #   Base folder for BACKUP
-BACKUP_BASE_DIR="/data/backups"
+BACKUP_BASE_DIR="/mnt/blockstorage/backups"
 #   Backup log file
 BACKUP_LOG_FILE="/var/log/backup_log_`date +%F_%H-%M-%S`.log"
 #   Day of the full backup, in lowercase
