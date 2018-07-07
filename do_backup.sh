@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
+### Configuration of backup script start
 #   Name of backup user
-BACKUP_USER="backup"
+BACKUP_USER="cumnsee_backup"
 #   File with password for BACKUP_USER
 BACKUP_PASSWORD_FILE="/etc/my.cnf.d/.pass"
 #   Base folder for BACKUP
 BACKUP_BASE_DIR="/data/backups"
-#   Day of full backup in lowercase
+#   Backup log file
+BACKUP_LOG_FILE="/var/log/backup_log_`date +%F_%H-%M-%S`.log"
+#   Day of the full backup, in lowercase
 # monday tuesday wednesday thursday friday saturday sunday
 FULL_BACKUP_DAY=monday
+#   Number of saved full backups
 FULL_BACKUP_COPY_NUM=4
+#   Prefix for backup folder
 FULL_BACKUP_PREFIX="backup_"
+#   Number of threads for backup
 PARALLEL_THREAD_NUM=4
+#   Number of threads for compression
 COMPRESS_THREAD_NUM=4
+### Configuration of backup script end
+
 TODAY=`date +%F`
 
 function extract_xtrabackup_logfile {
@@ -142,6 +151,7 @@ if [[ ${DAY_OF_TODAY} == ${FULL_BACKUP_DAY} ]] ; then
         echo "Full backup was not created"
         echo "Run full backup"
         backup_full
+        backup_incremental
     else
         echo "Full backup was created"
         echo "Run incremental backup"
@@ -155,6 +165,7 @@ elif [[ ${DAY_OF_TODAY} != ${FULL_BACKUP_DAY} ]] ; then
         echo "Full backup was not created"
         echo "Run full backup"
         backup_full
+        backup_incremental
     else
         echo "Full backup was created"
         echo "Run incremental backup"
