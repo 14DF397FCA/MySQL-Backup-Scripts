@@ -33,11 +33,25 @@ MYSQL_USER="root"
 ### Configuration of backup script end
 
 TODAY=`date +%F`
-FULL_BACKUP_DIR=${BACKUP_BASE_DIR}"/"${FULL_BACKUP_PREFIX}${TODAY}"/"${FULL_BACKUP_FOLDER_NAME}
+DATE_OF_FULL_BACKUP=""
+function to_lowercase {
+    echo $1 | tr '[:upper:]' '[:lower:]'
+}
+function get_day_of_today () {
+    echo $(to_lowercase `date +%A`)
+}
+DAY_OF_TODAY=$(get_day_of_today)
+if [[ ${DAY_OF_TODAY} == ${FULL_BACKUP_DAY} ]] ; then
+    echo "`date +%F_%T` Today is day of full backup ($DAY_OF_TODAY, $TODAY)"
+    DATE_OF_FULL_BACKUP=`date -d${FULL_BACKUP_DAY} +%F`
+else
+    echo "`date +%F_%T` Today is not day of full backup ($DAY_OF_TODAY, $TODAY)"
+    DATE_OF_FULL_BACKUP=`date -dlast-${FULL_BACKUP_DAY} +%F`
+fi
+FULL_BACKUP_DIR=${BACKUP_BASE_DIR}"/"${FULL_BACKUP_PREFIX}${DATE_OF_FULL_BACKUP}"/"${FULL_BACKUP_FOLDER_NAME}
 BACKUP_PATH_FILE="/tmp/backup_path"
 LAST_INCREMENTAL_BACKUP_FOLDER_FILE="/tmp/last_incremental_backup_folder"
 BIN_LOG_IN_SQL="/tmp/converted_mysql_bin_logs_`date +%F_%H-%M-%S`.sql"
-DATE_OF_FULL_BACKUP=""
 
 function apply_folder_permissions () {
     echo "`date +%F_%T` Set folder permissions"
@@ -300,12 +314,6 @@ function is_full_backup_today {
         echo 0
     fi
 }
-function get_day_of_today {
-    echo $(to_lowercase `date +%A`)
-}
-function to_lowercase {
-    echo $1 | tr '[:upper:]' '[:lower:]'
-}
 function mk_full_backup_dir {
     if [[ ${FULL_BACKUP_DIR} ]] ; then
         echo "`date +%F_%T` Make full backup dir ${FULL_BACKUP_DIR}"
@@ -414,7 +422,7 @@ function make_backup {
             echo "`date +%F_%T` Full backup was not created"
             echo "`date +%F_%T` Run full backup"
             backup_full
-    #        backup_incremental
+            backup_incremental
         else
             echo "`date +%F_%T` Full backup was created"
             echo "`date +%F_%T` Run incremental backup"
@@ -428,7 +436,7 @@ function make_backup {
             echo "`date +%F_%T` Full backup was not created"
             echo "`date +%F_%T` Run full backup"
             backup_full
-    #        backup_incremental
+            backup_incremental
         else
             echo "`date +%F_%T` Full backup was created"
             echo "`date +%F_%T` Run incremental backup"
@@ -440,7 +448,7 @@ function make_backup {
         exit 1
     fi
 }
-if [[ ! -d $BACKUP_BASE_DIR ]] ; then
+if [[ ! -d ${BACKUP_BASE_DIR} ]] ; then
     echo "`date +%F_%T` Can't find base backup directory $BACKUP_BASE_DIR"
     echo "`date +%F_%T` Exit..."
     exit 2
