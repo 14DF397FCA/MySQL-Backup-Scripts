@@ -23,6 +23,8 @@ FULL_BACKUP_FOLDER_NAME="full"
 INCREMENTAL_FOLDER_NAME_PREFIX="inc_"
 #   Number of threads for backup
 PARALLEL_THREAD_NUM=4
+#   Enable SELinux (Set 0 to disable)
+ENABLE_SELINUX=0
 #   Folder with mysql bin log files
 MYSQL_BIN_LOG_PATH="/mnt/blockstorage/mysql-bin-log"
 #   MySQL database folder
@@ -57,8 +59,10 @@ function apply_folder_permissions () {
     echo "`date +%F_%T` Set folder permissions"
     chown mysql:mysql ${MYSQL_DB_PATH} -R
     chmod 775 ${MYSQL_DB_PATH} -R
-    semanage fcontext -a -t mysqld_db_t "${MYSQL_DB_PATH}(/.*)?"
-    restorecon -vrF ${MYSQL_DB_PATH}
+    if [[ ${ENABLE_SELINUX} == 1 ]] ; then
+        semanage fcontext -a -t mysqld_db_t "${MYSQL_DB_PATH}(/.*)?"
+        restorecon -vrF ${MYSQL_DB_PATH}
+    fi
 }
 
 function make_binlog_info_file_path () {
