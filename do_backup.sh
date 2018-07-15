@@ -36,6 +36,14 @@ MYSQL_USER="root"
 
 TODAY=`date +%F`
 DATE_OF_FULL_BACKUP=""
+DAMAGE_TIME=""
+
+function get_damage_time () {
+    echo "Enter time when you database was damaged (in format like 2018-07-15T19:27:00)"
+    local TIME
+    read TIME
+    DAMAGE_TIME=${TIME}
+}
 function to_lowercase {
     echo $1 | tr '[:upper:]' '[:lower:]'
 }
@@ -103,7 +111,12 @@ function convert_bin_log_to_sql () {
         local BIN_FILE=${MYSQL_BIN_LOG_PATH}"/"${i}
         BIN_FILES_LINE=${BIN_FILES_LINE}" "${BIN_FILE}
     done
-    local cmd="mysqlbinlog --start-position=${STORED_BIN_FILE_POSITION} ${BIN_FILES_LINE}"
+    local cmd=""
+    if [[ ${DAMAGE_TIME} == "" ]] ; then
+        cmd="mysqlbinlog --start-position=${STORED_BIN_FILE_POSITION} ${BIN_FILES_LINE}"
+    else
+        cmd="mysqlbinlog --start-position=${STORED_BIN_FILE_POSITION} --stop-datetime=${DAMAGE_TIME} ${BIN_FILES_LINE}"
+    fi
     echo "Convert MySQL bin logs with command ${cmd}"
     ${cmd} > ${BIN_LOG_IN_SQL}
 }
@@ -118,18 +131,19 @@ function apply_converted_bin_log () {
 function apply_bin_log () {
     convert_bin_log_to_sql
     apply_converted_bin_log
+    echo "Done"
 }
 
 function prepare_full_backup {
     if [[ $1 ]] ; then
-        echo "`date +%F_%T` Prepare full backup to restore"
+        echo -e "`date +%F_%T` Prepare full backup to restore"
         local FULL_BACKUP=$1"/"${FULL_BACKUP_FOLDER_NAME}
         echo ${FULL_BACKUP} > ${BACKUP_PATH_FILE}
         if [[ -d ${FULL_BACKUP} ]] ; then
             echo "`date +%F_%T` Full backup stored in folder $FULL_BACKUP"
             local cmd="xtrabackup --prepare --apply-log-only --target-dir=${FULL_BACKUP}"
             echo "`date +%F_%T` Run command $cmd to prepare full backup"
-            ${cmd} > ${BACKUP_LOG_FILE}
+            ${cmd} >> ${BACKUP_LOG_FILE}
         else
             echo "`date +%F_%T` Can't find full backup"
             exit 8
@@ -149,7 +163,7 @@ function prepare_incremental_backup () {
         echo "`date +%F_%T` Incremental backup - $BACKUP_INCREMENTAL"
         cmd="xtrabackup --prepare --apply-log-only --target-dir=$BACKUP_FULL --incremental-dir=$BACKUP_INCREMENTAL"
         echo ${cmd}
-        ${cmd} > ${BACKUP_LOG_FILE}
+        ${cmd}
     else
         echo "`date +%F_%T` Missing folder with full or incremental backup"
         exit 11
@@ -165,7 +179,7 @@ function prepare_last_incremental_backup () {
         echo ${BACKUP_INCREMENTAL} > ${LAST_INCREMENTAL_BACKUP_FOLDER_FILE}
         cmd="xtrabackup --prepare --target-dir=$BACKUP_FULL --incremental-dir=$BACKUP_INCREMENTAL"
         echo ${cmd}
-        ${cmd} > ${BACKUP_LOG_FILE}
+        ${cmd}
     else
         echo "`date +%F_%T` Missing folder with full or last incremental backup"
         exit 10
@@ -216,7 +230,7 @@ function select_backup () {
     local BACKUP_LIST=$(ls -l ${BACKUP_BASE_DIR} | grep ${FULL_BACKUP_PREFIX} | awk ' { print $9 } ')
     echo "`date +%F_%T` List of available backups in folder ${BACKUP_BASE_DIR}:"
     printf '%s\n' "${BACKUP_LIST[@]}"
-    echo "`date +%F_%T` Choose backup to restore from list above"
+    echo "`date +%F_%T` Enter name of weekly backup and press ENTER:"
     read BACKUP
     local r=$(containsElement ${BACKUP} ${BACKUP_LIST[@]})
     if [[ ${r}  == 1 ]] ; then
@@ -250,40 +264,6 @@ function prepare_backups {
     fi
 }
 
-function extract_xtrabackup_logfile {
-    echo "`date +%F_%T` Try to decompress file xtrabackup_logfile.qp"
-    if [[ -d $1 ]] ; then
-        local XTRABACKUP_LOGFILE=$1"/xtrabackup_logfile.qp"
-        echo ${XTRABACKUP_LOGFILE}
-        if [[ -f ${XTRABACKUP_LOGFILE} ]] ; then
-            cmd="qpress -d $XTRABACKUP_LOGFILE $1"
-            echo "`date +%F_%T` Execute command $cmd to unpack xtrabackup_logfile file"
-            ${cmd} > ${BACKUP_LOG_FILE}
-        else
-            echo "`date +%F_%T` Can't access to file $XTRABACKUP_LOGFILE"
-        fi
-    else
-        echo "`date +%F_%T` Can't access to folder $1"
-    fi
-}
-
-function extract_xtrabackup_binlog_info {
-    echo "`date +%F_%T` Try to decompress file xtrabackup_binlog_info.qp"
-    if [[ -d $1 ]] ; then
-        local XTRABACKUP_LOGFILE=$1"/xtrabackup_binlog_info.qp"
-        echo ${XTRABACKUP_LOGFILE}
-        if [[ -f ${XTRABACKUP_LOGFILE} ]] ; then
-            cmd="qpress -d $XTRABACKUP_LOGFILE $1"
-            echo "`date +%F_%T` Execute command $cmd to unpack xtrabackup_binlog_info file"
-            ${cmd} > ${BACKUP_LOG_FILE}
-        else
-            echo "`date +%F_%T` Can't access to file $XTRABACKUP_LOGFILE"
-        fi
-    else
-        echo "`date +%F_%T` Can't access to folder $1"
-    fi
-}
-
 function extract_xtrabackup_files {
     extract_xtrabackup_logfile $1
     extract_xtrabackup_binlog_info $1
@@ -291,13 +271,13 @@ function extract_xtrabackup_files {
 
 
 function remove_old_backup {
-    echo "`date +%F_%T` Remove extra old backup, if needed"
-    echo "`date +%F_%T` Number of newest backup for saving - $FULL_BACKUP_COPY_NUM"
+    echo "`date +%F_%T` Remove extra old backup, if needed" >> ${BACKUP_LOG_FILE} 2>&1
+    echo "`date +%F_%T` Number of newest backup for saving - $FULL_BACKUP_COPY_NUM" >> ${BACKUP_LOG_FILE} 2>&1
     let NUM=1+$FULL_BACKUP_COPY_NUM
     for i in `ls -l ${BACKUP_BASE_DIR} | grep ${FULL_BACKUP_PREFIX} | awk '{ print $9 }' | sort -r | tail -n +${NUM}` ; do
         DIR=${BACKUP_BASE_DIR}"/"${i}
         if [[ -d ${DIR} ]]; then
-            echo "`date +%F_%T` Remove old backup in folder $DIR"
+            echo "`date +%F_%T` Remove old backup in folder $DIR" >> ${BACKUP_LOG_FILE} 2>&1
             rm -rf ${DIR}
         fi
     done
@@ -320,7 +300,7 @@ function is_full_backup_today {
 }
 function mk_full_backup_dir {
     if [[ ${FULL_BACKUP_DIR} ]] ; then
-        echo "`date +%F_%T` Make full backup dir ${FULL_BACKUP_DIR}"
+        echo "`date +%F_%T` Make full backup dir ${FULL_BACKUP_DIR}" >> ${BACKUP_LOG_FILE} 2>&1
         mkdir -p ${FULL_BACKUP_DIR}
     else
         exit 99
@@ -328,7 +308,7 @@ function mk_full_backup_dir {
 }
 function mk_inc_backup_dir {
     if [ -d ${FULL_BACKUP_DIR} ]; then
-        echo "`date +%F_%T` Make incremental backup dir ${INC_BACKUP_DIR_TODAY}"
+        echo "`date +%F_%T` Make incremental backup dir ${INC_BACKUP_DIR_TODAY}" >> ${BACKUP_LOG_FILE} 2>&1
         mkdir -p ${INC_BACKUP_DIR_TODAY}
     else
         echo "`date +%F_%T` Can't run incremental backup"
@@ -357,28 +337,24 @@ function make_backup_cmd {
 
 function backup_full {
     mk_full_backup_dir
-    echo "`date +%F_%T` Run full backup"
+    echo "`date +%F_%T` Run full backup" >> ${BACKUP_LOG_FILE} 2>&1
     local cmd=$(make_backup_cmd ${FULL_BACKUP_DIR})
-    echo ${cmd}
-    ${cmd} > ${BACKUP_LOG_FILE}
+    ${cmd} >> ${BACKUP_LOG_FILE} 2>&1
     # extract_xtrabackup_files ${FULL_BACKUP_DIR}
-    remove_old_backup
 }
 
 function backup_incremental {
     mk_inc_backup_dir
-    echo "`date +%F_%T` Run incremental backup"
+    echo "`date +%F_%T` Run incremental backup" >> ${BACKUP_LOG_FILE} 2>&1
     if [ -d ${INC_BACKUP_DIR_YESTERDAY} ]; then
-        echo "`date +%F_%T` Run incremental backup from incremental backup"
+        echo "`date +%F_%T` Run incremental backup from incremental backup" >> ${BACKUP_LOG_FILE} 2>&1
         cmd=$(make_backup_cmd ${INC_BACKUP_DIR_TODAY} ${INC_BACKUP_DIR_YESTERDAY})
-        echo ${cmd}
-        ${cmd}
+        ${cmd} >> ${BACKUP_LOG_FILE} 2>&1
 #        extract_xtrabackup_files ${INC_BACKUP_DIR_TODAY}
     else
-        echo "`date +%F_%T` Run incremental backup from full backup"
+        echo "`date +%F_%T` Run incremental backup from full backup" >> ${BACKUP_LOG_FILE} 2>&1
         cmd=$(make_backup_cmd ${INC_BACKUP_DIR_TODAY} ${FULL_BACKUP_DIR})
-        echo ${cmd}
-        ${cmd} > ${BACKUP_LOG_FILE}
+        ${cmd} >> ${BACKUP_LOG_FILE} 2>&1
 #        extract_xtrabackup_files ${INC_BACKUP_DIR_TODAY}
     fi
 }
@@ -392,7 +368,7 @@ function restore_db {
             echo "`date +%F_%T` Start restore databases"
             local cmd="xtrabackup --copy-back --target-dir=${FULL_BACKUP}"
             echo "`date +%F_%T` Execute restoring database with command ${cmd}"
-            ${cmd} > ${BACKUP_LOG_FILE}
+            ${cmd}
         else
             echo "`date +%F_%T` Folder with full backup not found"
             exit 13
@@ -413,37 +389,46 @@ function restore () {
     restore_db
     apply_folder_permissions
     start_mysql
-    apply_bin_log
+    echo -n "Do you want apply MySQL binary logs? [Y(yes) or N(no)]: "
+    read sure
+    if [[ $(to_lowercase ${sure}) == "y" ]] ; then
+        get_damage_time
+        echo "Damage time - ${DAMAGE_TIME}"
+        apply_bin_log
+    else
+        echo "`date +%F_%T` You not sure - exit"
+        exit 6
+    fi
 }
 function make_backup {
     local DAY_OF_TODAY=$(get_day_of_today)
-    echo "`date +%F_%T` Run full backup every $FULL_BACKUP_DAY"
+    echo "`date +%F_%T` Run full backup every $FULL_BACKUP_DAY" >> ${BACKUP_LOG_FILE} 2>&1
     if [[ ${DAY_OF_TODAY} == ${FULL_BACKUP_DAY} ]] ; then
-        echo "`date +%F_%T` Today is day of full backup ($DAY_OF_TODAY, $TODAY)"
+        echo "`date +%F_%T` Today is day of full backup ($DAY_OF_TODAY, $TODAY)" >> ${BACKUP_LOG_FILE} 2>&1
         DATE_OF_FULL_BACKUP=`date -d${FULL_BACKUP_DAY} +%F`
         update_variables
         if [[ $(is_full_backup_today) == 0 ]] ; then
-            echo "`date +%F_%T` Full backup was not created"
-            echo "`date +%F_%T` Run full backup"
+            echo "`date +%F_%T` Full backup was not created" >> ${BACKUP_LOG_FILE} 2>&1
+            echo "`date +%F_%T` Run full backup" >> ${BACKUP_LOG_FILE} 2>&1
             backup_full
             backup_incremental
         else
-            echo "`date +%F_%T` Full backup was created"
-            echo "`date +%F_%T` Run incremental backup"
+            echo "`date +%F_%T` Full backup was created" >> ${BACKUP_LOG_FILE} 2>&1
+            echo "`date +%F_%T` Run incremental backup" >> ${BACKUP_LOG_FILE} 2>&1
             backup_incremental
         fi
     elif [[ ${DAY_OF_TODAY} != ${FULL_BACKUP_DAY} ]] ; then
-        echo "`date +%F_%T` Today is not day of full backup ($DAY_OF_TODAY, $TODAY)"
+        echo "`date +%F_%T` Today is not day of full backup ($DAY_OF_TODAY, $TODAY)" >> ${BACKUP_LOG_FILE} 2>&1
         DATE_OF_FULL_BACKUP=`date -dlast-${FULL_BACKUP_DAY} +%F`
         update_variables
         if [[ $(is_full_backup_today) == 0 ]] ; then
-            echo "`date +%F_%T` Full backup was not created"
-            echo "`date +%F_%T` Run full backup"
+            echo "`date +%F_%T` Full backup was not created" >> ${BACKUP_LOG_FILE} 2>&1
+            echo "`date +%F_%T` Run full backup" >> ${BACKUP_LOG_FILE} 2>&1
             backup_full
             backup_incremental
         else
-            echo "`date +%F_%T` Full backup was created"
-            echo "`date +%F_%T` Run incremental backup"
+            echo "`date +%F_%T` Full backup was created" >> ${BACKUP_LOG_FILE} 2>&1
+            echo "`date +%F_%T` Run incremental backup" >> ${BACKUP_LOG_FILE} 2>&1
             backup_incremental
         fi
     else
@@ -451,6 +436,7 @@ function make_backup {
         echo "`date +%F_%T` Exit..."
         exit 1
     fi
+    remove_old_backup
 }
 if [[ ! -d ${BACKUP_BASE_DIR} ]] ; then
     echo "`date +%F_%T` Can't find base backup directory $BACKUP_BASE_DIR"
