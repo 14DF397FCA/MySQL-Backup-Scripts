@@ -14,7 +14,7 @@ BACKUP_LOG_FILE="/var/log/backup_log_`date +%F_%H-%M-%S`.log"
 # monday tuesday wednesday thursday friday saturday sunday
 FULL_BACKUP_DAY=monday
 #   Number of saved full backups
-FULL_BACKUP_COPY_NUM=4
+FULL_BACKUP_COPY_NUM=2
 #   Prefix for weekly backup folder
 FULL_BACKUP_PREFIX="backup_"
 #   Name of sub folder for full backup
