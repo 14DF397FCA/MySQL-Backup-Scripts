@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#set -x
-#set -e
+set -x
+set -e
 ### Configuration of backup script start
 #   Name of backup user
 BACKUP_USER="cumnsee_backup"
