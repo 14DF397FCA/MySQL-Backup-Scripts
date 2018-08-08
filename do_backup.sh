@@ -163,6 +163,8 @@ function prepare_full_backup {
 function prepare_incremental_backup () {
     local BACKUP_FULL=$1
     local BACKUP_INCREMENTAL=$2
+    echo "BACKUP_FULL - ${BACKUP_FULL}"
+    echo "BACKUP_INCREMENTAL - ${BACKUP_INCREMENTAL}"
     if [[ (-d ${BACKUP_FULL}) && (-d ${BACKUP_INCREMENTAL}) ]] ; then
         echo "`date +%F_%T` Merge incremental backup with full backup"
         echo "`date +%F_%T` Full backup - $BACKUP_FULL"
@@ -178,6 +180,8 @@ function prepare_incremental_backup () {
 function prepare_last_incremental_backup () {
     local BACKUP_FULL=$1
     local BACKUP_INCREMENTAL=$2
+    echo "BACKUP_FULL - ${BACKUP_FULL}"
+    echo "BACKUP_INCREMENTAL - ${BACKUP_INCREMENTAL}"
     if [[ (-d ${BACKUP_FULL}) && (-d ${BACKUP_INCREMENTAL}) ]] ; then
         echo "`date +%F_%T` Merge last incremental backup with full backup"
         echo "`date +%F_%T` Full backup - $BACKUP_FULL"
