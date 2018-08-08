@@ -215,7 +215,7 @@ function prepare_incremental_backups() {
             for i in ${FIRST_INCREMENTAL_BACKUPS[@]} ;
             do
                 local INCREMENTAL_BACKUP=${BACKUP_DIR}"/"${i}
-                prepare_incremental_backup ${BACKUP_DIR} ${INCREMENTAL_BACKUP}
+                prepare_incremental_backup ${FULL_BACKUP} ${INCREMENTAL_BACKUP}
             done
             local INCREMENTAL_BACKUP=${BACKUP_DIR}"/"${INCREMENTAL_BACKUPS[0]}
             prepare_last_incremental_backup ${FULL_BACKUP} ${INCREMENTAL_BACKUP}
