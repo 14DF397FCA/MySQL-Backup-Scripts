@@ -95,7 +95,7 @@ function get_binlog_info_file () {
         fi
     else
         echo "Can't find folder with incremental or full backup"
-        exit 13
+        exit 14
     fi
 }
 
@@ -105,7 +105,7 @@ function convert_bin_log_to_sql () {
     if [[ ${MYSQL_BIN_LOG_PATH} == "" ]] ; then
         echo "Variable MYSQL_BIN_LOG_PATH - is empty, can't restore from binary logs"
         echo "Check configuration and try restore again"
-        exit 14
+        exit 15
     fi
     local BINLOG_INFO_FILE=$(get_binlog_info_file)
     local STORED_BIN_FILE_SHORT=$(cat ${BINLOG_INFO_FILE} | awk ' { print $1 } ')
@@ -152,11 +152,11 @@ function prepare_full_backup {
             ${cmd} >> ${BACKUP_LOG_FILE}
         else
             echo "`date +%F_%T` Can't find full backup"
-            exit 8
+            exit 9
         fi
     else
         echo "`date +%F_%T` Full backup folder is not presented"
-        exit 7
+        exit 8
     fi
 }
 
@@ -172,7 +172,7 @@ function prepare_incremental_backup () {
         ${cmd}
     else
         echo "`date +%F_%T` Missing folder with full or incremental backup"
-        exit 11
+        exit 16
     fi
 }
 function prepare_last_incremental_backup () {
@@ -188,7 +188,7 @@ function prepare_last_incremental_backup () {
         ${cmd}
     else
         echo "`date +%F_%T` Missing folder with full or last incremental backup"
-        exit 10
+        exit 17
     fi
 }
 function prepare_incremental_backups() {
@@ -217,11 +217,11 @@ function prepare_incremental_backups() {
             prepare_last_incremental_backup ${FULL_BACKUP} ${INCREMENTAL_BACKUP}
         else
             echo "`date +%F_%T` Number of incremental backup not less 0"
-            exit 9
+            exit 11
         fi
     else
         echo "`date +%F_%T` Incremental backup folder is not presented"
-        exit 9
+        exit 10
     fi
 }
 
@@ -309,7 +309,7 @@ function mk_full_backup_dir {
         echo "`date +%F_%T` Make full backup dir ${FULL_BACKUP_DIR}" >> ${BACKUP_LOG_FILE} 2>&1
         mkdir -p ${FULL_BACKUP_DIR}
     else
-        exit 99
+        exit 18
     fi
 }
 function mk_inc_backup_dir {
@@ -403,7 +403,7 @@ function restore () {
         apply_bin_log
     else
         echo "`date +%F_%T` You not sure - exit"
-        exit 6
+        exit 7
     fi
 }
 function make_backup {
