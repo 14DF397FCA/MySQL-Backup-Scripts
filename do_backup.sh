@@ -101,6 +101,12 @@ function get_binlog_info_file () {
 
 function convert_bin_log_to_sql () {
     echo "`date +%F_%T` Converting MySQL binary logs to SQL"
+    echo "`date +%F_%T` MYSQL_BIN_LOG_PATH - ${MYSQL_BIN_LOG_PATH}"
+    if [[ ${MYSQL_BIN_LOG_PATH} == "" ]] ; then
+        echo "Variable MYSQL_BIN_LOG_PATH - is empty, can't restore from binary logs"
+        echo "Check configuration and try restore again"
+        exit 14
+    fi
     local BINLOG_INFO_FILE=$(get_binlog_info_file)
     local STORED_BIN_FILE_SHORT=$(cat ${BINLOG_INFO_FILE} | awk ' { print $1 } ')
     local STORED_BIN_FILE_POSITION=$(cat ${BINLOG_INFO_FILE} | awk ' { print $2 } ')
