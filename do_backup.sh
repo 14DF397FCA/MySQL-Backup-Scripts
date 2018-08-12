@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-set -x
-set -e
+#set -x
+#set -e
 ### Configuration of backup script start
 #   Name of backup user
 BACKUP_USER="cumnsee_backup"
@@ -37,6 +37,10 @@ MYSQL_USER="root"
 TODAY=`date +%F`
 DATE_OF_FULL_BACKUP=""
 DAMAGE_TIME=""
+BACKUP_PATH_FILE="/tmp/backup_path_file.tmp"
+MYSQL_DB_PATH_NEW_FILE="/tmp/mysql_db_path_new_file.tmp"
+NEW_RESTORED_BACKUP_PATH_FILE="/tmp/new_restored_backup_path_file.tmp"
+
 
 function get_damage_time () {
     echo "Enter time when you database was damaged (in format like 2018-07-15T19:27:00)"
@@ -371,7 +375,6 @@ function backup_incremental {
 
 function restore_db {
     local FULL_BACKUP=$(cat ${BACKUP_PATH_FILE})
-    echo ${FULL_BACKUP}
     if [[ ${FULL_BACKUP} ]] ; then
         echo "`date +%F_%T` Start restoration of databases"
         if [[ -d ${FULL_BACKUP} ]] ; then
@@ -387,13 +390,61 @@ function restore_db {
         echo "`date +%F_%T` Missing folder with full prepared backup"
         exit 12
     fi
+    echo ${FULL_BACKUP%/*} > ${BACKUP_PATH_FILE}
 }
-
+function extract_last_folder() {
+    echo $(basename $(dirname $1))
+}
 function start_mysql() {
     echo "`date +%F_%T` Trying to start MySQL"
     systemctl start mysql
 }
+function stop_mysql() {
+    echo "`date +%F_%T` Trying to stop MySQL"
+    systemctl stop mysql
+}
+function rename_current_mysql_dir() {
+    echo "Rename exists MySQL folder"
+    local MYSQL_DB_NEW_PATH="${MYSQL_DB_PATH}_$(generate_random_string)"
+    echo ${MYSQL_DB_NEW_PATH} > ${MYSQL_DB_PATH_NEW_FILE}
+    mv ${MYSQL_DB_PATH} ${MYSQL_DB_NEW_PATH}
+
+}
+function prepare_before_restore() {
+    echo "Prepare before restore"
+    stop_mysql
+    rename_current_mysql_dir
+}
+function generate_random_string() {
+    echo $(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
+
+}
+function make_new_backup_path() {
+    local SUF=$(generate_random_string)
+    local LAST_DIR=$(extract_last_folder $1)
+    local NEW_PATH="${BACKUP_BASE_DIR}/${SUF}_${LAST_DIR}"
+    echo ${NEW_PATH}
+}
+function rename_restored_backup() {
+    echo "`date +%F_%T` Rename restored backup to random name"
+    local RESTORED_BACKUP_PATH=$1
+    local NEW_RESTORED_BACKUP_PATH=$2
+    echo "Rename $RESTORED_BACKUP_PATH -> $NEW_RESTORED_BACKUP_PATH"
+    local CMD=`mv ${RESTORED_BACKUP_PATH} ${NEW_RESTORED_BACKUP_PATH}`
+    echo ${NEW_RESTORED_BACKUP_PATH} > ${NEW_RESTORED_BACKUP_PATH_FILE}
+    echo "Execute command $CMD"
+     ${CMD}
+}
+function purge_binary_logs() {
+    echo "`date +%F_%T` Purge exists binary logs before now"
+    local SQL="PURGE BINARY LOGS BEFORE NOW();"
+    echo "Execute SQL ${SQL}"
+    echo "Enter password for user ${MYSQL_USER} at host ${MYSQL_HOST}:${MYSQL_PORT}"
+    echo ${SQL} | mysql -u ${MYSQL_USER} -P ${MYSQL_PORT} -h ${MYSQL_HOST} -p
+
+}
 function restore () {
+    prepare_before_restore
     echo "`date +%F_%T` Prepare backup and restore it"
     prepare_backups
     restore_db
@@ -406,9 +457,15 @@ function restore () {
         echo "Damage time - ${DAMAGE_TIME}"
         apply_bin_log
     else
-        echo "`date +%F_%T` You not sure - exit"
-        exit 7
+        echo "`date +%F_%T` You not sure - skip"
+#        exit 7
     fi
+    local RESTORED_BACKUP_PATH=`cat ${BACKUP_PATH_FILE}`
+    local NEW_RESTORED_BACKUP_PATH=$(make_new_backup_path ${RESTORED_BACKUP_PATH})
+    rename_restored_backup ${RESTORED_BACKUP_PATH} ${NEW_RESTORED_BACKUP_PATH}
+    make_backup
+    purge_binary_logs
+    echo "Done"
 }
 function make_backup {
     local DAY_OF_TODAY=$(get_day_of_today)
@@ -456,6 +513,11 @@ fi
 
 if [[ $1 == "restore" ]] ; then
     restore
+    echo "Next steps:"
+    echo "Verify that your MySQL instance is work properly;"
+    echo "If your MySQL instance is work properly remove next folders:"
+    echo "Folder with your MySQL instance before restoration - "`cat ${MYSQL_DB_PATH_NEW_FILE}`
+    echo "Folder with previous full backup (before restoration) - "`cat ${NEW_RESTORED_BACKUP_PATH_FILE}`
 elif [[ $1 == "backup" ]] ; then
     make_backup
 else
