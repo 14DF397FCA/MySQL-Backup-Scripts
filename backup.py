@@ -1,16 +1,15 @@
 import argparse
 import logging
+import subprocess
 from datetime import datetime, timedelta
-import calendar
-
 #   Name of backup user
+from typing import List
+
 BACKUP_USER = "cumnsee_backup"
 #   File with password for BACKUP_USER
 BACKUP_PASSWORD_FILE = "/etc/my.cnf.d/.pass"
 #   Base folder for BACKUP
 BACKUP_BASE_DIR = "/mnt/blockstorage/backups"
-#   Backup log file
-BACKUP_LOG_FILE = "/var/log/backup_log_`date +%F_%H-%M-%S`.log"
 #   Number of day for full backup
 # monday tuesday wednesday thursday friday saturday sunday
 #   1      2         3        4       5       6       7
@@ -40,10 +39,10 @@ MYSQL_USER = "root"
 
 
 def read_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it.")
     parser.add_argument("-a", "--action", type=str, help="Script action backup or restore", required=True)
     parser.add_argument("-l", "--log_level", type=str, help="Set log level (INFO, DEBUG, WARNING, ERROR)",
-                        required=False)
+                        required=False, default="INFO")
     return parser.parse_args()
 
 
@@ -83,9 +82,31 @@ def get_first_day_of_week():
     get_today()
 
 
-def is_full_backup_done():
-    logging.debug("Сhecking for a full backup")
-    return False
+def read_backup_info():
+    info = f"{FULL_BACKUP_PATH}/xtrabackup_checkpoints"
+    with open(info) as f:
+        raw_lines = f.readlines()
+    lines = []
+    for x in raw_lines:
+        if x[len(x) - 1] == "\n":
+            lines.append(x[:-1])
+        else:
+            lines.append(x)
+    return lines
+
+
+def is_backup_done(full: bool):
+    if full is True:
+        t = "backup_type = full-backuped"
+    else:
+        t = "fg"
+    logging.debug("Сhecking for a backup state")
+    res = read_backup_info()
+    for x in res:
+        if x == t:
+            return True
+        else:
+            return False
 
 
 def do_backup():
@@ -102,8 +123,45 @@ def get_full_backup_date():
     return str(get_today().date() - timedelta(days=(TODAY_DAY_OF_WEEK - 1)))
 
 
+TOOL = "/usr/bin/xtrabackup"
+
+
+def read_password():
+    with open(BACKUP_PASSWORD_FILE) as f:
+        a = str(f.readline())
+        if a[len(a) - 1] == "\n":
+            return a[:-1]
+        else:
+            return a
+
+
+def make_backup_command(target_dir, from_dir = ""):
+    password = read_password()
+    if len(from_dir) == 0:
+        res = f"{TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} " \
+                 f"--target-dir={target_dir} --user={BACKUP_USER} --password={password}"
+        res = res.split(" ")
+        logging.debug("Backup command - %s", res)
+        return res
+    else:
+        res = f"{TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} " \
+              f"--target-dir={target_dir} --user={BACKUP_USER} --password={password}  --incremental-basedir={from_dir}"
+        res = res.split(" ")
+        logging.debug("Backup command - %s", res)
+        return res
+
+
+def execute_command(command: List):
+    return subprocess.Popen(command, stdout=subprocess.PIPE)
+
+
 def do_full_backup():
     logging.info("Do full backup")
+    execute_command(["mkdir", "-p", FULL_BACKUP_PATH])
+    command = make_backup_command(target_dir=FULL_BACKUP_PATH)
+    proc = execute_command(command)
+    for x in proc.stdout:
+        logging.debug(x)
 
 
 def get_full_backup_path():
@@ -122,8 +180,8 @@ def do_inc_backup_from_backup(previous_backup: str, current_backup: str):
 
 def do_incremental_backup():
     logging.info("Do incremental backup")
-    full_backup_done = is_full_backup_done()
-    inc_backup_done = is_incremental_backup_done()
+    full_backup_done = is_backup_done(full=True)
+    inc_backup_done = is_backup_done(full=False)
 
     if full_backup_done is True and inc_backup_done is False:
         logging.debug("Full backup exists, incremental backup is not exists. Do incremental backup from full")
