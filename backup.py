@@ -1,10 +1,16 @@
 import argparse
 import logging
+import os
+from os import listdir
+import random
+import string
 import subprocess
+import sys
 from datetime import datetime, timedelta
-#   Name of backup user
 from typing import List
 
+# Configuration of backup script start
+#   Name of backup user
 BACKUP_USER = "cumnsee_backup"
 #   File with password for BACKUP_USER
 BACKUP_PASSWORD_FILE = "/etc/my.cnf.d/.pass"
@@ -23,9 +29,9 @@ FULL_BACKUP_FOLDER_NAME = "full"
 #   Prefix for sub folder with incremental backup
 INCREMENTAL_FOLDER_NAME_PREFIX = "inc"
 #   Number of threads for backup
-PARALLEL_THREAD_NUM = 4
+PARALLEL_THREAD_NUM = 1
 #   Enable SELinux (Set 0 to disable)
-ENABLE_SELINUX = False
+ENABLE_SELINUX = True
 #   Folder with mysql bin log files
 MYSQL_BIN_LOG_PATH = "/mnt/blockstorage/mysql-bin-log"
 #   MySQL database folder
@@ -33,9 +39,14 @@ MYSQL_DB_PATH = "/var/lib/mysql"
 MYSQL_HOST = "127.0.0.1"
 MYSQL_PORT = "3306"
 MYSQL_USER = "root"
+BACKUP_TOOL = "/usr/bin/xtrabackup"
 
 
-### Configuration of backup script end
+# Configuration of backup script end
+
+
+def datetime_in_custom_format():
+    return get_today().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def read_args():
@@ -74,18 +85,14 @@ def get_day_of_week():
     return today_id
 
 
-def get_today():
+def get_today() -> datetime:
     return datetime.now()
 
 
-def get_first_day_of_week():
-    get_today()
-
-
-def read_backup_info():
-    info = f"{FULL_BACKUP_PATH}/xtrabackup_checkpoints"
+def read_backup_info(info) -> List:
     with open(info) as f:
         raw_lines = f.readlines()
+    logging.debug("read_backup_info - \n%s\n", raw_lines)
     lines = []
     for x in raw_lines:
         if x[len(x) - 1] == "\n":
@@ -95,18 +102,38 @@ def read_backup_info():
     return lines
 
 
-def is_backup_done(full: bool):
+def is_backup_done(full: bool, path):
+    logging.debug("Looking for backup in %s", path)
+    if os.path.exists(path) is False:
+        logging.debug("Path %s not found", path)
+        return False
     if full is True:
         t = "backup_type = full-backuped"
     else:
-        t = "fg"
-    logging.debug("Сhecking for a backup state")
-    res = read_backup_info()
+        t = "backup_type = incremental"
+    logging.debug("Сheck for a backup state")
+    info = f"{path}/xtrabackup_checkpoints"
+    if os.path.exists(info) is False:
+        logging.debug("File %s not found")
+        return False
+    res = read_backup_info(info)
     for x in res:
+        logging.debug("is_backup_done - %s", x)
         if x == t:
             return True
         else:
             return False
+
+
+def remove_old_backup():
+    logging.debug("Remove extra backups, older %s weeks", FULL_BACKUP_COPY_NUM)
+    existed = get_exists_backups()
+    logging.debug("remove_old_backup.existed - %s", existed)
+    for_del_raw = existed[: -1 * FULL_BACKUP_COPY_NUM]
+    for x in for_del_raw:
+        cmd = f"rm -rf {BACKUP_BASE_DIR}/{x}"
+        logging.debug("remove_old_backup.cmd - %s", cmd)
+        execute_command(cmd.split(" "))
 
 
 def do_backup():
@@ -123,10 +150,7 @@ def get_full_backup_date():
     return str(get_today().date() - timedelta(days=(TODAY_DAY_OF_WEEK - 1)))
 
 
-TOOL = "/usr/bin/xtrabackup"
-
-
-def read_password():
+def read_password_from_file():
     with open(BACKUP_PASSWORD_FILE) as f:
         a = str(f.readline())
         if a[len(a) - 1] == "\n":
@@ -135,33 +159,38 @@ def read_password():
             return a
 
 
-def make_backup_command(target_dir, from_dir = ""):
-    password = read_password()
+def make_backup_command(target_dir, from_dir=""):
+    password = read_password_from_file()
     if len(from_dir) == 0:
-        res = f"{TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} " \
-                 f"--target-dir={target_dir} --user={BACKUP_USER} --password={password}"
+        res = f"{BACKUP_TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock " \
+              f"--parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} --user={BACKUP_USER} --password={password}"
+        logging.debug("Backup command (str) - %s", res)
         res = res.split(" ")
-        logging.debug("Backup command - %s", res)
+        logging.debug("Backup command (list) - %s", res)
         return res
     else:
-        res = f"{TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} " \
-              f"--target-dir={target_dir} --user={BACKUP_USER} --password={password}  --incremental-basedir={from_dir}"
+        res = f"{BACKUP_TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock " \
+              f"--parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} --user={BACKUP_USER} " \
+              f"--password={password} --incremental-basedir={from_dir}"
         res = res.split(" ")
         logging.debug("Backup command - %s", res)
         return res
 
 
 def execute_command(command: List):
-    return subprocess.Popen(command, stdout=subprocess.PIPE)
+    return subprocess.Popen(command, stdout=subprocess.PIPE).wait()
+
+
+def make_backup(target_backup, source_backup=""):
+    execute_command(["mkdir", "-p", target_backup])
+    command = make_backup_command(target_dir=target_backup, from_dir=source_backup)
+    execute_command(command)
 
 
 def do_full_backup():
     logging.info("Do full backup")
-    execute_command(["mkdir", "-p", FULL_BACKUP_PATH])
-    command = make_backup_command(target_dir=FULL_BACKUP_PATH)
-    proc = execute_command(command)
-    for x in proc.stdout:
-        logging.debug(x)
+    make_backup(target_backup=FULL_BACKUP_PATH)
+    do_incremental_backup()
 
 
 def get_full_backup_path():
@@ -170,25 +199,32 @@ def get_full_backup_path():
     return a
 
 
-def is_incremental_backup_done():
-    return False
-
-
 def do_inc_backup_from_backup(previous_backup: str, current_backup: str):
-    pass
+    logging.info("Starting incremental backup from %s to %s", previous_backup, current_backup)
+    make_backup(target_backup=current_backup, source_backup=previous_backup)
 
 
 def do_incremental_backup():
     logging.info("Do incremental backup")
-    full_backup_done = is_backup_done(full=True)
-    inc_backup_done = is_backup_done(full=False)
+    full_backup_done = is_backup_done(full=True, path=FULL_BACKUP_PATH)
+    prev_inc_backup_done = is_backup_done(full=False, path=INC_BACKUP_PATH_PREVIOUS)
+    cur_inc_backup_done = is_backup_done(full=False, path=INC_BACKUP_PATH_CURRENT)
 
-    if full_backup_done is True and inc_backup_done is False:
+    logging.debug("full_backup_done - %s", full_backup_done)
+    logging.debug("prev_inc_backup_done - %s", prev_inc_backup_done)
+    logging.debug("cur_inc_backup_done - %s", cur_inc_backup_done)
+
+    if full_backup_done is True and prev_inc_backup_done is True and cur_inc_backup_done is False:
+        logging.debug("Full backup exists, previous incremental backup is exists. "
+                      "Do incremental backup from incremental")
+        do_inc_backup_from_backup(previous_backup=INC_BACKUP_PATH_PREVIOUS, current_backup=INC_BACKUP_PATH_CURRENT)
+    elif full_backup_done is True and prev_inc_backup_done is False and cur_inc_backup_done is False:
         logging.debug("Full backup exists, incremental backup is not exists. Do incremental backup from full")
         do_inc_backup_from_backup(previous_backup=FULL_BACKUP_PATH, current_backup=INC_BACKUP_PATH_CURRENT)
-    elif full_backup_done is True and inc_backup_done is True:
-        logging.debug("Full backup exists, incremental backup is exists. Do incremental backup from incremental")
-        do_inc_backup_from_backup(previous_backup=INC_BACKUP_PATH_PREVIOUS, current_backup=INC_BACKUP_PATH_CURRENT)
+    elif full_backup_done is True and prev_inc_backup_done is True and cur_inc_backup_done is True:
+        logging.error("Incremental backup for today already exists. ")
+    elif full_backup_done is True and prev_inc_backup_done is False and cur_inc_backup_done is True:
+        logging.error("Incremental backup for today already exists. There are not any previous incremental backup")
     elif full_backup_done is False:
         logging.debug("Full backup not exists. Do incremental backup from incremental")
         do_full_backup()
@@ -204,14 +240,317 @@ def get_incremental_backup_path():
 
 def get_previous_incremental_backup_path():
     logging.debug("Today day - %s, Full backup - %s", TODAY_DAY_OF_WEEK, FULL_BACKUP_DAY)
-    for x in range(TODAY_DAY_OF_WEEK, FULL_BACKUP_DAY, -1):
-        logging.debug("get_previous_incremental_backup_path - %s", x)
+    logging.debug("Try to find previous incremental backup")
+    for x in range(FULL_BACKUP_DAY, TODAY_DAY_OF_WEEK):
+        prev_inc = get_today().date() - timedelta(days=int(x))
+        path = f"{WEEKLY_BACKUP_PATH}/inc_{prev_inc}"
+        logging.debug("get_previous_incremental_backup_path - %s", path)
+        if is_backup_done(full=False, path=path) is True:
+            return path
     return ""
+
+
+def list_in_dir(search_path):
+    return [dI for dI in os.listdir(search_path) if os.path.isdir(os.path.join(search_path, dI))]
+
+
+def files_in_dir(search_path):
+    return [f for f in listdir(MYSQL_BIN_LOG_PATH) if os.path.isfile(os.path.join(search_path, f))]
+
+
+def get_exists_backups():
+    logging.debug("Get existed backups")
+    output = list_in_dir(search_path=BACKUP_BASE_DIR)
+    logging.debug("Backup dirs found - %s", output)
+    return sorted(output)
+
+
+def print_exists_backups(backups):
+    logging.debug("Print existed backup")
+    a = "\n".join(x for x in backups)
+    logging.info("Existed backups:\n\n%s\n", a)
+
+
+def __read_stdin():
+    _stdin = sys.stdin.readline()
+    if _stdin[len(_stdin) - 1] == "\n":
+        return _stdin[:-1]
+    else:
+        return _stdin
+
+
+def select_exists_backups(existed):
+    logging.debug("Select existed backups:")
+
+    a = __read_stdin()
+    while a not in existed:
+        logging.error("Backup \"%s\" not found in list", a)
+        print_exists_backups(existed)
+        a = __read_stdin()
+    return a
+
+
+def make_prepare_command(full_backup, apply_log_only, inc_backup=""):
+    a = f"{BACKUP_TOOL} --prepare --target-dir={full_backup} "
+    if len(inc_backup) > 0:
+        a += f"--incremental-dir={inc_backup} "
+    if apply_log_only is True:
+        a += "--apply-log-only "
+    logging.debug("make_prepare_command.a - %s", a)
+    t = str(a).split(" ")
+    tt = []
+    for x in t:
+        if len(x) > 0:
+            tt.append(x)
+    return tt
+
+
+def prepare_full_backup(backup_path):
+    logging.debug("Prepare full backup, %s", backup_path)
+    full_backup = f"{backup_path}/{FULL_BACKUP_FOLDER_NAME}"
+    a: str = make_prepare_command(full_backup=full_backup, apply_log_only=True)
+    logging.debug("Command to prepare backup - %s", a)
+    execute_command(make_prepare_command(full_backup=full_backup, apply_log_only=True))
+    return full_backup
+
+
+def get_inc_backup(backup_path):
+    r = list_in_dir(backup_path)
+    incs = []
+    logging.debug("get_inc_backup.r - %s", r)
+    for x in r:
+        logging.debug("get_inc_backup.x - %s", x)
+        if INCREMENTAL_FOLDER_NAME_PREFIX in x:
+            incs.append(x)
+    return sorted(incs)
+
+
+def prepare_commands_for_incremental_backups(full_backup, backup_path):
+    logging.debug("Prepare incremental backups")
+    inc_backups = get_inc_backup(backup_path)
+    if len(inc_backups) > 0:
+        logging.debug("inc_backups - %s", inc_backups)
+        commands = []
+        inc_backups_first = inc_backups[:-1]
+        logging.debug("inc_backups_first - %s", inc_backups_first)
+        for inc in inc_backups_first:
+            inc_backup = f"{backup_path}/{inc}"
+            logging.debug("inc_backup - %s", inc_backup)
+            commands.append(make_prepare_command(full_backup=full_backup, inc_backup=inc_backup, apply_log_only=True))
+
+        inc_backup_last = inc_backups[-1]
+        inc_backup = f"{backup_path}/{inc_backup_last}"
+        logging.debug("inc_backup_last - %s\ninc_backup - %s", inc_backup_last, inc_backup)
+        commands.append(make_prepare_command(full_backup=full_backup, inc_backup=inc_backup, apply_log_only=False))
+        logging.debug("List of commands - %s", commands)
+        return commands, inc_backup
+    else:
+        logging.error("There are not found incremental backups in folder %s", backup_path)
+        return []
+
+
+def make_backup_path(backup_dir):
+    return f"{BACKUP_BASE_DIR}/{backup_dir}"
+
+
+def execute_prepare_commands(cmds):
+    if len(cmds) > 0:
+        for x in cmds:
+            logging.debug("Execute command - %s", x)
+            execute_command(x)
+
+
+def prepare_backup(prev_step: bool):
+    if prev_step is False:
+        return False, ""
+    if os.path.exists(MYSQL_DB_PATH) is False:
+        backup_list = get_exists_backups()
+        print_exists_backups(backup_list)
+        backup_dir = select_exists_backups(backup_list)
+        backup_path = make_backup_path(backup_dir)
+        full_backup = prepare_full_backup(backup_path)
+        prepare_cmds, last_inc_backup = prepare_commands_for_incremental_backups(full_backup=full_backup,
+                                                                                 backup_path=backup_path)
+        execute_prepare_commands(cmds=prepare_cmds)
+        return True, full_backup, last_inc_backup, backup_path
+    else:
+        logging.error("Previous instance is exists, remove it before prepare restoration")
+        return False, "", "", ""
+
+
+def mysql_stop():
+    execute_command(["systemctl", "stop", "mysql"])
+
+
+def mysql_start(prev_step):
+    if prev_step is False:
+        return False
+    execute_command(["systemctl", "start", "mysql"])
+    return True
+
+
+def generate_random_string(size=15, chars=string.ascii_letters + string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+
+def rename_exist_instance():
+    new_name = f"{MYSQL_DB_PATH}_{generate_random_string()}"
+    if os.path.exists(MYSQL_DB_PATH):
+        execute_command(["mv", MYSQL_DB_PATH, new_name])
+    else:
+        logging.warning("Path %s not found", MYSQL_DB_PATH)
+
+
+def remove_exists_instance():
+    mysql_stop()
+    rename_exist_instance()
+
+
+def restore_db(prev_step, full_backup):
+    if prev_step is False:
+        return False
+    if os.path.exists(full_backup):
+        cmd = f"{BACKUP_TOOL} --copy-back --target-dir={full_backup} --datadir={MYSQL_DB_PATH}"
+        logging.debug("Execute command - %s", cmd)
+        execute_command(cmd.split(" "))
+        return True
+
+
+def restore_folder_permissions(prev_step):
+    if prev_step is False:
+        return False
+    cmd = f"chown mysql:mysql {MYSQL_DB_PATH} -R"
+    logging.debug("restore_folder_permissions: chown - %s", cmd)
+    execute_command(cmd.split(" "))
+    if ENABLE_SELINUX is True:
+        a = str(f"semanage fcontext -a -t mysqld_db_t \"{MYSQL_DB_PATH}(/.*)?\"")
+        logging.debug("restore_folder_permissions: semanage - %s", a)
+        execute_command(a.split(" "))
+        a = str(f"restorecon -vrF {MYSQL_DB_PATH}")
+        logging.debug("restore_folder_permissions: restorecon - %s", a)
+        execute_command(a.split(" "))
+    return True
+
+
+def execute_command_in_bash(command):
+    file = __make_temp_bash()
+    save_to_file(file_path=file, text=command)
+    execute_command(f"/usr/bin/bash {file}".split(" "))
+
+
+def apply_bin_log(password):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} < {BIN_LOG_IN_SQL}"
+    logging.debug("apply_bin_log - %s", cmd)
+    execute_command_in_bash(command=cmd)
+
+
+def rename_restored_backup(backup_dir):
+    new_name = f"{backup_dir}_{generate_random_string()}"
+    cmd = f"mv {backup_dir} {new_name}"
+    logging.debug("rename_restored_backup - %s", cmd)
+    execute_command(cmd.split(" "))
+
+
+def purge_binary_logs(password):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='PURGE BINARY LOGS BEFORE NOW();'"
+    execute_command_in_bash(command=cmd)
+
+
+def make_binlog_info_file_path(path):
+    return f"{path}/xtrabackup_binlog_info"
+
+
+def get_binlog_info_file(last_inc_backup, full_backup):
+    logging.debug("get_binlog_info_file.last_inc_backup - %s", last_inc_backup)
+    logging.debug("get_binlog_info_file.full_backup - %s", full_backup)
+    if os.path.exists(last_inc_backup):
+        return make_binlog_info_file_path(path=last_inc_backup)
+    else:
+        return make_binlog_info_file_path(path=full_backup)
+
+
+def __read_file(binlog_info):
+    def __list_to_tuple(b):
+        return tuple(str(b).split("\t"))
+
+    with open(binlog_info) as f:
+        a = str(f.readline())
+        logging.debug("__read_file.a - %s", a)
+        if a[len(a) - 1] == "\n":
+            return __list_to_tuple(a[:-1])
+        else:
+            return __list_to_tuple(a)
+
+
+def get_bin_files(mysqlbin_file):
+    res_raw = sorted(files_in_dir(MYSQL_BIN_LOG_PATH))[:-1]
+    logging.debug(res_raw)
+    mysql_bin_id = res_raw.index(mysqlbin_file)
+    res = res_raw[mysql_bin_id:len(res_raw)]
+    logging.debug(res)
+    path_bin_files = []
+    for x in res:
+        path_bin_files.append(f"{MYSQL_BIN_LOG_PATH}/{x}")
+    logging.debug(path_bin_files)
+    return path_bin_files
+
+
+def convert_bin_files_to_sql(bin_files, lsn, damage_time):
+    def __bin_file_to_line():
+        return " ".join(x for x in bin_files)
+
+    if len(damage_time) == 0:
+        cmd = f"mysqlbinlog --start-position={lsn} {__bin_file_to_line()}"
+    else:
+        cmd = f"mysqlbinlog --start-position={lsn}  --stop-datetime={damage_time} {__bin_file_to_line()}"
+    cmd += f" > {BIN_LOG_IN_SQL}"
+
+    logging.debug("convert_bin_files_to_sql - %s", cmd)
+
+    execute_command_in_bash(command=cmd)
+
+
+def save_to_file(file_path, text):
+    with open(file_path, "w") as f:
+        f.write(f"{text}\n")
+
+
+def __make_temp_bash():
+    return f"/tmp/{generate_random_string()}.sh"
+
+
+def restore_databases():
+    remove_exists_instance()
+    prev_step, full_backup, last_inc_backup, backup_dir = prepare_backup(True)
+    prev_step = restore_db(prev_step, full_backup)
+    prev_step = restore_folder_permissions(prev_step)
+    prev_step = mysql_start(prev_step)
+
+    password = ""
+    if prev_step is True:
+        logging.info("Do you want apply MySQL binary logs? [Y(yes) or N(no)]: ")
+
+        if __read_stdin().lower() in ("y", "yes"):
+            logging.info("Enter password for user %s@%s:%s", MYSQL_USER, MYSQL_HOST, MYSQL_PORT)
+            password = __read_stdin()
+            logging.info("Enter time when you database was damaged (in format like 2018-07-15T19:27:00)")
+            damage_time = __read_stdin()
+            binlog_info = get_binlog_info_file(last_inc_backup=last_inc_backup, full_backup=full_backup)
+            logging.debug("binlog_info - %s", binlog_info)
+            mysqlbin_file, lsn, _ = __read_file(binlog_info)
+            logging.debug("mysqlbin_file - %s, lsn - %s", mysqlbin_file, lsn)
+            bin_files = get_bin_files(mysqlbin_file)
+            convert_bin_files_to_sql(bin_files=bin_files, lsn=lsn, damage_time=damage_time)
+            apply_bin_log(password=password)
+    rename_restored_backup(backup_dir)
+    do_full_backup()
+    purge_binary_logs(password=password)
 
 
 if __name__ == '__main__':
     args = read_args()
     configure_logger(arguments=args)
+    BIN_LOG_IN_SQL = f"/tmp/converted_mysql_bin_logs_{datetime_in_custom_format()}.sql"
 
     TODAY_DAY_OF_WEEK = get_day_of_week()
     WEEKLY_BACKUP_PATH = f"{BACKUP_BASE_DIR}/{get_full_backup_date()}"
@@ -222,7 +561,9 @@ if __name__ == '__main__':
     if args.action == "backup":
         logging.info("We are going to do database backup")
         do_backup()
+        remove_old_backup()
     elif args.action == "restore":
         logging.info("We are going to do database restore")
+        restore_databases()
     else:
         logging.error("Action \"%s\" does not support", args.action)
