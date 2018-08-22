@@ -39,10 +39,11 @@ MYSQL_DB_PATH = "/var/lib/mysql"
 MYSQL_HOST = "127.0.0.1"
 MYSQL_PORT = "3306"
 MYSQL_USER = "root"
-BACKUP_TOOL = "/usr/bin/xtrabackup"
-
 
 # Configuration of backup script end
+
+
+BACKUP_TOOL = "/usr/bin/xtrabackup"
 
 
 def datetime_in_custom_format():
