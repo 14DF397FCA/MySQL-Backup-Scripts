@@ -162,19 +162,21 @@ def read_password_from_file():
 
 def make_backup_command(target_dir, from_dir=""):
     password = read_password_from_file()
+
+    def __make_command():
+        return f"{BACKUP_TOOL} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} " \
+               f"--user={BACKUP_USER} --password={password} " \
+               f"--host={MYSQL_HOST} --port={MYSQL_PORT}"
+
     if len(from_dir) == 0:
-        res = f"{BACKUP_TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock " \
-              f"--parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} --user={BACKUP_USER} --password={password}"
-        logging.debug("Backup command (str) - %s", res)
+        res = __make_command()
         res = res.split(" ")
         logging.debug("Backup command (list) - %s", res)
         return res
     else:
-        res = f"{BACKUP_TOOL} --host={MYSQL_HOST} --port={MYSQL_PORT} --backup --no-lock " \
-              f"--parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} --user={BACKUP_USER} " \
-              f"--password={password} --incremental-basedir={from_dir}"
+        res = f"{__make_command()} --incremental-basedir={from_dir}"
         res = res.split(" ")
-        logging.debug("Backup command - %s", res)
+        logging.debug("Backup command (list) - %s", res)
         return res
 
 
@@ -566,7 +568,7 @@ if __name__ == '__main__':
     BIN_LOG_IN_SQL = f"/tmp/converted_mysql_bin_logs_{datetime_in_custom_format()}.sql"
 
     TODAY_DAY_OF_WEEK = get_day_of_week()
-    WEEKLY_BACKUP_PATH = f"{BACKUP_BASE_DIR}/{get_full_backup_date()}"
+    WEEKLY_BACKUP_PATH = f"{BACKUP_BASE_DIR}/{FULL_BACKUP_PREFIX}{get_full_backup_date()}"
     FULL_BACKUP_PATH = get_full_backup_path()
     INC_BACKUP_PATH_CURRENT = get_incremental_backup_path()
     INC_BACKUP_PATH_PREVIOUS = get_previous_incremental_backup_path()
