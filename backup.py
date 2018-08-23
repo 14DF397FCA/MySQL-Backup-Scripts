@@ -368,25 +368,34 @@ def prepare_backup(prev_step: bool):
         backup_list = get_exists_backups()
         print_exists_backups(backup_list)
         backup_dir = select_exists_backups(backup_list)
-        backup_path = make_backup_path(backup_dir)
-        full_backup = prepare_full_backup(backup_path)
-        prepare_cmds, last_inc_backup = prepare_commands_for_incremental_backups(full_backup=full_backup,
-                                                                                 backup_path=backup_path)
-        execute_prepare_commands(cmds=prepare_cmds)
-        return True, full_backup, last_inc_backup, backup_path
+        logging.info("Are you sure you want to restore this backup? [Y(yes) or N(no)]: ")
+
+        if __read_stdin().lower() in ("y", "yes"):
+            backup_path = make_backup_path(backup_dir)
+            full_backup = prepare_full_backup(backup_path)
+            prepare_cmds, last_inc_backup = prepare_commands_for_incremental_backups(full_backup=full_backup,
+                                                                                     backup_path=backup_path)
+            execute_prepare_commands(cmds=prepare_cmds)
+            return True, full_backup, last_inc_backup, backup_path
+        else:
+            return False, "", "", ""
     else:
         logging.error("Previous instance is exists, remove it before prepare restoration")
         return False, "", "", ""
 
 
 def mysql_stop():
-    execute_command(["systemctl", "stop", "mysql"])
+    cmd = "systemctl stop mysql"
+    logging.debug("Stopping MySQL - %s", cmd)
+    execute_command(cmd.split(" "))
 
 
 def mysql_start(prev_step):
     if prev_step is False:
         return False
-    execute_command(["systemctl", "start", "mysql"])
+    cmd = "systemctl start mysql"
+    logging.debug("Starting MySQL - %s", cmd)
+    execute_command(cmd.split(" "))
     return True
 
 
@@ -395,9 +404,11 @@ def generate_random_string(size=15, chars=string.ascii_letters + string.ascii_up
 
 
 def rename_exist_instance():
-    new_name = f"{MYSQL_DB_PATH}_{generate_random_string()}"
+    logging.debug("Try to rename exists instance to new name")
+    MYSQL_DB_PATH_NEW = f"{MYSQL_DB_PATH}_{generate_random_string()}"
+    logging.debug("New name for exists instance - %s", MYSQL_DB_PATH_NEW)
     if os.path.exists(MYSQL_DB_PATH):
-        execute_command(["mv", MYSQL_DB_PATH, new_name])
+        execute_command(["mv", MYSQL_DB_PATH, MYSQL_DB_PATH_NEW])
     else:
         logging.warning("Path %s not found", MYSQL_DB_PATH)
 
@@ -434,27 +445,28 @@ def restore_folder_permissions(prev_step):
 
 
 def execute_command_in_bash(command):
-    file = __make_temp_bash()
-    save_to_file(file_path=file, text=command)
-    execute_command(f"/usr/bin/bash {file}".split(" "))
+    f_name = __make_temp_bash()
+    save_to_file(file_path=f_name, text=command)
+    execute_command(f"/usr/bin/bash {f_name}".split(" "))
+    return f_name
 
 
 def apply_bin_log(password):
     cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} < {BIN_LOG_IN_SQL}"
     logging.debug("apply_bin_log - %s", cmd)
-    execute_command_in_bash(command=cmd)
+    APPLY_BIN_LOG_FILE = execute_command_in_bash(command=cmd)
 
 
 def rename_restored_backup(backup_dir):
-    new_name = f"{backup_dir}_{generate_random_string()}"
-    cmd = f"mv {backup_dir} {new_name}"
+    RENAME_RESTORED_BACKUP_NEW = f"{backup_dir}_{generate_random_string()}"
+    cmd = f"mv {backup_dir} {RENAME_RESTORED_BACKUP_NEW}"
     logging.debug("rename_restored_backup - %s", cmd)
     execute_command(cmd.split(" "))
 
 
 def purge_binary_logs(password):
     cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='PURGE BINARY LOGS BEFORE NOW();'"
-    execute_command_in_bash(command=cmd)
+    PURGE_BINARY_LOGS_FILE = execute_command_in_bash(command=cmd)
 
 
 def make_binlog_info_file_path(path):
@@ -508,7 +520,7 @@ def convert_bin_files_to_sql(bin_files, lsn, damage_time):
 
     logging.debug("convert_bin_files_to_sql - %s", cmd)
 
-    execute_command_in_bash(command=cmd)
+    CONVERTED_BINFILES_SQL = execute_command_in_bash(command=cmd)
 
 
 def save_to_file(file_path, text):
@@ -558,6 +570,11 @@ if __name__ == '__main__':
     FULL_BACKUP_PATH = get_full_backup_path()
     INC_BACKUP_PATH_CURRENT = get_incremental_backup_path()
     INC_BACKUP_PATH_PREVIOUS = get_previous_incremental_backup_path()
+    APPLY_BIN_LOG_FILE = None
+    PURGE_BINARY_LOGS_FILE = None
+    CONVERTED_BINFILES_SQL = None
+    MYSQL_DB_PATH_NEW = None
+    RENAME_RESTORED_BACKUP_NEW = None
 
     if args.action == "backup":
         logging.info("We are going to do database backup")
@@ -566,5 +583,16 @@ if __name__ == '__main__':
     elif args.action == "restore":
         logging.info("We are going to do database restore")
         restore_databases()
+        logging.warning(f"\n"
+                        "Next steps:\n"
+                        "Verify that your MySQL instance is work properly;\n"
+                        "If your MySQL instance is work properly remove next files and folders:\n"
+                        "Bash script that apply converted mysqlbinlog files to DB - %s\n"
+                        "Bash script to purge MySQL Binlog files - %s\n"
+                        "Converted to SQL MySQL binary logs - %s\n"
+                        "Old MySQL instance - %s\n"
+                        "Folder with previous full backup (before restoration) - %s",
+                        APPLY_BIN_LOG_FILE, PURGE_BINARY_LOGS_FILE, CONVERTED_BINFILES_SQL, MYSQL_DB_PATH_NEW,
+                        RENAME_RESTORED_BACKUP_NEW)
     else:
         logging.error("Action \"%s\" does not support", args.action)
