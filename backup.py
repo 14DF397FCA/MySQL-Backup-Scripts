@@ -166,8 +166,7 @@ def make_backup_command(target_dir, from_dir=""):
 
     def __make_command():
         return f"{BACKUP_TOOL} --backup --no-lock --parallel={PARALLEL_THREAD_NUM} --target-dir={target_dir} " \
-               f"--user={BACKUP_USER} --password={password} " \
-               f"--host={MYSQL_HOST} --port={MYSQL_PORT}"
+               f"--user={BACKUP_USER} --password={password} "
 
     if len(from_dir) == 0:
         res = __make_command()
