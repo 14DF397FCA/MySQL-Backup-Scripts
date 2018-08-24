@@ -284,7 +284,7 @@ def __read_stdin():
 
 
 def select_exists_backups(existed):
-    logging.debug("Select existed backups:")
+    logging.info("Select existed backups:")
 
     a = __read_stdin()
     while a not in existed:
@@ -314,7 +314,7 @@ def prepare_full_backup(backup_path):
     full_backup = f"{backup_path}/{FULL_BACKUP_FOLDER_NAME}"
     a: str = make_prepare_command(full_backup=full_backup, apply_log_only=True)
     logging.debug("Command to prepare backup - %s", a)
-    execute_command(make_prepare_command(full_backup=full_backup, apply_log_only=True))
+    execute_command(a)
     return full_backup
 
 
