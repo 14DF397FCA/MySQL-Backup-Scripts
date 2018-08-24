@@ -407,7 +407,7 @@ def rename_exist_instance():
     MYSQL_DB_PATH_NEW = f"{MYSQL_DB_PATH}_{generate_random_string()}"
     logging.debug("New name for exists instance - %s", MYSQL_DB_PATH_NEW)
     if os.path.exists(MYSQL_DB_PATH):
-        execute_command(["mv", MYSQL_DB_PATH, MYSQL_DB_PATH_NEW])
+        execute_command(f"mv {MYSQL_DB_PATH} {MYSQL_DB_PATH_NEW}")
     else:
         logging.warning("Path %s not found", MYSQL_DB_PATH)
 
