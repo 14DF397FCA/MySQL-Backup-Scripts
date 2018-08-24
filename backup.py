@@ -32,7 +32,7 @@ INCREMENTAL_FOLDER_NAME_PREFIX = "inc"
 #   Number of threads for backup
 PARALLEL_THREAD_NUM = 1
 #   Enable SELinux (Set 0 to disable)
-ENABLE_SELINUX = True
+ENABLE_SELINUX = False
 #   Folder with mysql bin log files
 MYSQL_BIN_LOG_PATH = "/mnt/blockstorage/mysql-bin-log"
 #   MySQL database folder
