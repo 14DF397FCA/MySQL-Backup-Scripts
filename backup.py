@@ -135,7 +135,7 @@ def remove_old_backup():
     for x in for_del_raw:
         cmd = f"rm -rf {BACKUP_BASE_DIR}/{x}"
         logging.debug("remove_old_backup.cmd - %s", cmd)
-        execute_command(cmd.split(" "))
+        execute_command(cmd)
 
 
 def do_backup():
@@ -170,22 +170,22 @@ def make_backup_command(target_dir, from_dir=""):
 
     if len(from_dir) == 0:
         res = __make_command()
-        res = res.split(" ")
-        logging.debug("Backup command (list) - %s", res)
+        res = res
+        logging.debug("Backup command - %s", res)
         return res
     else:
         res = f"{__make_command()} --incremental-basedir={from_dir}"
-        res = res.split(" ")
-        logging.debug("Backup command (list) - %s", res)
+        res = res
+        logging.debug("Backup command - %s", res)
         return res
 
 
-def execute_command(command: List):
-    return subprocess.Popen(command, stdout=subprocess.PIPE).wait()
+def execute_command(command: str):
+    return subprocess.Popen(command.split(" "), stdout=subprocess.PIPE).wait()
 
 
 def make_backup(target_backup, source_backup=""):
-    execute_command(["mkdir", "-p", target_backup])
+    execute_command("mkdir -p target_backup")
     command = make_backup_command(target_dir=target_backup, from_dir=source_backup)
     execute_command(command)
 
@@ -300,12 +300,7 @@ def make_prepare_command(full_backup, apply_log_only, inc_backup=""):
     if apply_log_only is True:
         a += "--apply-log-only "
     logging.debug("make_prepare_command.a - %s", a)
-    t = str(a).split(" ")
-    tt = []
-    for x in t:
-        if len(x) > 0:
-            tt.append(x)
-    return tt
+    return a
 
 
 def prepare_full_backup(backup_path):
@@ -335,12 +330,14 @@ def prepare_commands_for_incremental_backups(full_backup, backup_path):
         logging.debug("inc_backups - %s", inc_backups)
         commands = []
         inc_backups_first = inc_backups[:-1]
+        logging.debug("Merge Incremental backups with full")
         logging.debug("inc_backups_first - %s", inc_backups_first)
         for inc in inc_backups_first:
             inc_backup = f"{backup_path}/{inc}"
             logging.debug("inc_backup - %s", inc_backup)
             commands.append(make_prepare_command(full_backup=full_backup, inc_backup=inc_backup, apply_log_only=True))
 
+        logging.debug("Merge last incremental backup with full")
         inc_backup_last = inc_backups[-1]
         inc_backup = f"{backup_path}/{inc_backup_last}"
         logging.debug("inc_backup_last - %s\ninc_backup - %s", inc_backup_last, inc_backup)
@@ -389,7 +386,7 @@ def prepare_backup(prev_step: bool):
 def mysql_stop():
     cmd = "systemctl stop mysql"
     logging.debug("Stopping MySQL - %s", cmd)
-    execute_command(cmd.split(" "))
+    execute_command(cmd)
 
 
 def mysql_start(prev_step):
@@ -397,7 +394,7 @@ def mysql_start(prev_step):
         return False
     cmd = "systemctl start mysql"
     logging.debug("Starting MySQL - %s", cmd)
-    execute_command(cmd.split(" "))
+    execute_command(cmd)
     return True
 
 
@@ -426,7 +423,7 @@ def restore_db(prev_step, full_backup):
     if os.path.exists(full_backup):
         cmd = f"{BACKUP_TOOL} --copy-back --target-dir={full_backup} --datadir={MYSQL_DB_PATH}"
         logging.debug("Execute command - %s", cmd)
-        execute_command(cmd.split(" "))
+        execute_command(cmd)
         return True
 
 
@@ -435,21 +432,21 @@ def restore_folder_permissions(prev_step):
         return False
     cmd = f"chown mysql:mysql {MYSQL_DB_PATH} -R"
     logging.debug("restore_folder_permissions: chown - %s", cmd)
-    execute_command(cmd.split(" "))
+    execute_command(cmd)
     if ENABLE_SELINUX is True:
         a = str(f"semanage fcontext -a -t mysqld_db_t \"{MYSQL_DB_PATH}(/.*)?\"")
         logging.debug("restore_folder_permissions: semanage - %s", a)
-        execute_command(a.split(" "))
+        execute_command(a)
         a = str(f"restorecon -vrF {MYSQL_DB_PATH}")
         logging.debug("restore_folder_permissions: restorecon - %s", a)
-        execute_command(a.split(" "))
+        execute_command(a)
     return True
 
 
 def execute_command_in_bash(command):
     f_name = __make_temp_bash()
     save_to_file(file_path=f_name, text=command)
-    execute_command(f"/usr/bin/bash {f_name}".split(" "))
+    execute_command(f"/usr/bin/bash {f_name}")
     return f_name
 
 
@@ -463,7 +460,7 @@ def rename_restored_backup(backup_dir):
     RENAME_RESTORED_BACKUP_NEW = f"{backup_dir}_{generate_random_string()}"
     cmd = f"mv {backup_dir} {RENAME_RESTORED_BACKUP_NEW}"
     logging.debug("rename_restored_backup - %s", cmd)
-    execute_command(cmd.split(" "))
+    execute_command(cmd)
 
 
 def purge_binary_logs(password):
