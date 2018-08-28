@@ -407,6 +407,7 @@ def generate_random_string(size=15, chars=string.ascii_letters + string.ascii_up
 
 def rename_exist_instance():
     logging.debug("Try to rename exists instance to new name")
+    global MYSQL_DB_PATH_NEW
     MYSQL_DB_PATH_NEW = f"{MYSQL_DB_PATH}_{generate_random_string()}"
     logging.debug("New name for exists instance - %s", MYSQL_DB_PATH_NEW)
     if os.path.exists(MYSQL_DB_PATH):
@@ -436,6 +437,11 @@ def restore_folder_permissions(prev_step):
     cmd = f"chown mysql:mysql {MYSQL_DB_PATH} -R"
     logging.debug("restore_folder_permissions: chown - %s", cmd)
     execute_command(cmd.split(" "))
+
+    cmd = f"chmod 775 {MYSQL_DB_PATH} -R"
+    logging.debug("restore_folder_permissions: chmod - %s", cmd)
+    execute_command(cmd.split(" "))
+
     if ENABLE_SELINUX is True:
         a = str(f"semanage fcontext -a -t mysqld_db_t \"{MYSQL_DB_PATH}(/.*)?\"")
         logging.debug("restore_folder_permissions: semanage - %s", a)
@@ -456,10 +462,12 @@ def execute_command_in_bash(command):
 def apply_bin_log(password):
     cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} < {BIN_LOG_IN_SQL}"
     logging.debug("apply_bin_log - %s", cmd)
+    global APPLY_BIN_LOG_FILE
     APPLY_BIN_LOG_FILE = execute_command_in_bash(command=cmd)
 
 
 def rename_restored_backup(backup_dir):
+    global RENAME_RESTORED_BACKUP_NEW
     RENAME_RESTORED_BACKUP_NEW = f"{backup_dir}_{generate_random_string()}"
     cmd = f"mv {backup_dir} {RENAME_RESTORED_BACKUP_NEW}"
     logging.debug("rename_restored_backup - %s", cmd)
@@ -468,6 +476,7 @@ def rename_restored_backup(backup_dir):
 
 def purge_binary_logs(password):
     cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='PURGE BINARY LOGS BEFORE NOW();'"
+    global PURGE_BINARY_LOGS_FILE
     PURGE_BINARY_LOGS_FILE = execute_command_in_bash(command=cmd)
 
 
@@ -521,7 +530,7 @@ def convert_bin_files_to_sql(bin_files, lsn, damage_time):
     cmd += f" > {BIN_LOG_IN_SQL}"
 
     logging.debug("convert_bin_files_to_sql - %s", cmd)
-
+    global CONVERTED_BINFILES_SQL
     CONVERTED_BINFILES_SQL = execute_command_in_bash(command=cmd)
 
 
