@@ -5,7 +5,7 @@ import os
 from os import listdir
 import random
 import string
-import subprocess
+import subprocesssdf
 import sys
 from datetime import datetime, timedelta
 from typing import List
@@ -35,7 +35,7 @@ PARALLEL_THREAD_NUM = 1
 ENABLE_SELINUX = False
 #   Folder with mysql bin log files
 MYSQL_BIN_LOG_PATH = "/mnt/blockstorage/mysql-bin-log"
-#   MySQL database folder
+#   MySQL datasdfbase folder
 MYSQL_DB_PATH = "/var/lib/mysql"
 MYSQL_HOST = "127.0.0.1"
 MYSQL_PORT = "3306"
