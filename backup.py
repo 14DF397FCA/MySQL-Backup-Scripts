@@ -621,12 +621,20 @@ def prepare_dump(source_db, target_db, dump_file):
     execute_command_in_bash(command=cmd)
 
 
+def change_owner(target_db, password):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost';;'"
+    logging.debug("drop_target_db.cmd - %s", cmd)
+    global DROP_TARGET_DB
+    DROP_TARGET_DB = execute_command_in_bash(command=cmd)
+
+
 def copy_db():
     password = read_password_from_stdin()
     source_db = get_source_db()
     target_db = get_target_db()
     drop_target_db(target_db=target_db, password=password)
     create_database(target_db=target_db, password=password)
+    change_owner(target_db=target_db, password=password)
     dump_file = export_db(source_db=source_db, password=password)
     prepare_dump(source_db=source_db, target_db=target_db, dump_file=dump_file)
     import_db(target_db=target_db, password=password, dump_file=dump_file)
