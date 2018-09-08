@@ -632,9 +632,9 @@ def copy_db():
     password = read_password_from_stdin()
     source_db = get_source_db()
     target_db = get_target_db()
-    drop_target_db(target_db=target_db, password=password)
-    create_database(target_db=target_db, password=password)
-    change_owner(target_db=target_db, password=password)
+    # drop_target_db(target_db=target_db, password=password)
+    # create_database(target_db=target_db, password=password)
+    # change_owner(target_db=target_db, password=password)
     dump_file = export_db(source_db=source_db, password=password)
     prepare_dump(source_db=source_db, target_db=target_db, dump_file=dump_file)
     import_db(target_db=target_db, password=password, dump_file=dump_file)
@@ -642,13 +642,10 @@ def copy_db():
                     "Source database - \"%s\", \tTarget database - \"%s\"\n"
                     "Verify that new copy is work properly!\n"
                     "Remove next file:\n"
-                    "\tDrop target DB script - %s\n"
-                    "\tCreate target DB script - %s\n"
                     "\tExport source DB script - %s\n"
                     "\tImport source DB script - %s\n"
-                    "\tChange DB owner script - %s"
-                    "\tDump file - %s", source_db, target_db, DROP_TARGET_DB, CREATE_TARGET_DB, EXPORT_DB, IMPORT_DB,
-                    dump_file, CHANGE_OWNER_FILE)
+                    "\tDump file - %s", source_db, target_db, EXPORT_DB, IMPORT_DB,
+                    dump_file)
     logging.info("Done")
 
 
