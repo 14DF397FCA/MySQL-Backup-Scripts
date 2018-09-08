@@ -33,7 +33,7 @@ INCREMENTAL_FOLDER_NAME_PREFIX = "inc"
 PARALLEL_THREAD_NUM = 1
 #   Enable SELinux (Set 0 to disable)
 ENABLE_SELINUX = False
-#   Folder with mysql bin log files
+#   Folder with MySQL bin log files
 MYSQL_BIN_LOG_PATH = "/mnt/blockstorage/mysql-bin-log"
 #   MySQL database folder
 MYSQL_DB_PATH = "/var/lib/mysql"
@@ -555,8 +555,7 @@ def restore_databases():
         logging.info("Do you want apply MySQL binary logs? [Y(yes) or N(no)]: ")
 
         if __read_stdin().lower() in ("y", "yes"):
-            logging.info("Enter password for user %s@%s:%s", MYSQL_USER, MYSQL_HOST, MYSQL_PORT)
-            password = __read_stdin()
+            password = read_password_from_stdin()
             logging.info("Enter time when you database was damaged (in format like 2018-07-15T19:27:00)")
             damage_time = __read_stdin()
             binlog_info = get_binlog_info_file(last_inc_backup=last_inc_backup, full_backup=full_backup)
@@ -569,6 +568,79 @@ def restore_databases():
     rename_restored_backup(backup_dir)
     do_full_backup()
     purge_binary_logs(password=password)
+
+
+def read_password_from_stdin():
+    logging.info("Enter password for user %s@%s:%s", MYSQL_USER, MYSQL_HOST, MYSQL_PORT)
+    return __read_stdin()
+
+
+def get_source_db():
+    logging.info("Enter name of source DB:")
+    return __read_stdin()
+
+
+def get_target_db():
+    logging.info("Enter name of target DB:")
+    return __read_stdin()
+
+
+def drop_target_db(target_db, password):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='DROP DATABASE IF EXISTS {target_db};'"
+    logging.debug("drop_target_db.cmd - %s", cmd)
+    global DROP_TARGET_DB
+    DROP_TARGET_DB = execute_command_in_bash(command=cmd)
+
+
+def create_database(target_db, password):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='CREATE DATABASE IF NOT EXISTS {target_db} CHARACTER SET utf8 COLLATE utf8_unicode_ci;'"
+    logging.debug("create_database.cmd - %s", cmd)
+    global CREATE_TARGET_DB
+    CREATE_TARGET_DB = execute_command_in_bash(command=cmd)
+
+
+def export_db(source_db, password):
+    dump_file = f"/tmp/export_db_path_{generate_random_string()}.sql"
+    cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {source_db} --lock-tables=false > {dump_file}"
+    logging.debug("export_db.cmd - %s", cmd)
+    global EXPORT_DB
+    EXPORT_DB = execute_command_in_bash(command=cmd)
+    return dump_file
+
+
+def import_db(target_db, password, dump_file):
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {target_db} < {dump_file}"
+    logging.debug("import_db.cmd - %s", cmd)
+    global IMPORT_DB
+    IMPORT_DB = execute_command_in_bash(command=cmd)
+
+
+def prepare_dump(source_db, target_db, dump_file):
+    cmd = f"sed -i \"s/{source_db}/{target_db}/g\" {dump_file}"
+    logging.debug("prepare_dump.cmd - %s", cmd)
+    execute_command_in_bash(command=cmd)
+
+
+def copy_db():
+    password = read_password_from_stdin()
+    source_db = get_source_db()
+    target_db = get_target_db()
+    drop_target_db(target_db=target_db, password=password)
+    create_database(target_db=target_db, password=password)
+    dump_file = export_db(source_db=source_db, password=password)
+    prepare_dump(source_db=source_db, target_db=target_db, dump_file=dump_file)
+    import_db(target_db=target_db, password=password, dump_file=dump_file)
+    logging.warning("\n"
+                    "Source database - \"%s\", \tTarget database - \"%s\"\n"
+                    "Verify that new copy is work properly!\n"
+                    "Remove next file:\n"
+                    "\tDrop target DB script - %s\n"
+                    "\tCreate target DB script - %s\n"
+                    "\tExport source DB script - %s\n"
+                    "\tImport source DB script - %s\n"
+                    "\tDump file - %s", source_db, target_db, DROP_TARGET_DB, CREATE_TARGET_DB, EXPORT_DB, IMPORT_DB,
+                    dump_file)
+    logging.info("Done")
 
 
 if __name__ == '__main__':
@@ -605,5 +677,8 @@ if __name__ == '__main__':
                         "Folder with previous full backup (before restoration) - %s",
                         APPLY_BIN_LOG_FILE, PURGE_BINARY_LOGS_FILE, CONVERTED_BINFILES_SQL, MYSQL_DB_PATH_NEW,
                         RENAME_RESTORED_BACKUP_NEW)
+    elif args.action == "copy":
+        logging.info("Start COPY one database to another one")
+        copy_db()
     else:
         logging.error("Action \"%s\" does not support", args.action)
