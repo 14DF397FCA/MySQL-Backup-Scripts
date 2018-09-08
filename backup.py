@@ -601,7 +601,7 @@ def create_database(target_db, password):
 
 def export_db(source_db, password):
     dump_file = f"/tmp/export_db_path_{generate_random_string()}.sql"
-    cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {source_db} --lock-tables=false > {dump_file}"
+    cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {source_db} --lock-tables=false --events --routines --triggers > {dump_file}"
     logging.debug("export_db.cmd - %s", cmd)
     global EXPORT_DB
     EXPORT_DB = execute_command_in_bash(command=cmd)
