@@ -52,7 +52,7 @@ def datetime_in_custom_format():
 
 
 def read_args():
-    parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it.")
+    parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it. Supported actions - backup, restore and copy")
     parser.add_argument("-a", "--action", type=str, help="Script action backup or restore", required=True)
     parser.add_argument("-l", "--log_level", type=str, help="Set log level (INFO, DEBUG, WARNING, ERROR)",
                         required=False, default="INFO")
