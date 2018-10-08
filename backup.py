@@ -12,7 +12,7 @@ from typing import List
 
 # Configuration of backup script start
 #   Name of backup user
-BACKUP_USER = "cumnsee_backup"
+BACKUP_USER = "backup"
 #   File with password for BACKUP_USER
 BACKUP_PASSWORD_FILE = "/etc/my.cnf.d/.pass"
 #   Base folder for BACKUP
