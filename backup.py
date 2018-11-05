@@ -623,7 +623,21 @@ def prepare_dump(source_db, target_db, dump_file):
 
 
 def change_owner(target_db, password):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost';GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cumnsee.com'; GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'140.82.45.46'; GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'144.202.0.210'; GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'45.77.219.89'; GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cpanel16004103.vultr.com'; FLUSH PRIVILEGES;'"
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} " \
+          f"--execute='" \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cumnsee.com'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cpanel16004103.vultr.com'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'140.82.45.46'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'144.202.0.210'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'45.77.219.89'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'localhost'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'cumnsee.com'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'cpanel16004103.vultr.com'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'140.82.45.46'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'144.202.0.210'; " \
+          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'45.77.219.89'; " \
+          f"FLUSH PRIVILEGES;'"
     logging.debug("drop_target_db.cmd - %s", cmd)
     global CHANGE_OWNER_FILE
     CHANGE_OWNER_FILE = execute_command_in_bash(command=cmd)
