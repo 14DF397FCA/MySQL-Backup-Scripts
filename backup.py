@@ -52,7 +52,8 @@ def datetime_in_custom_format():
 
 
 def read_args():
-    parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it. Supported actions - backup, restore and copy")
+    parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it. "
+                                                 "Supported actions - backup, restore and copy")
     parser.add_argument("-a", "--action", type=str, help="Script action backup or restore", required=True)
     parser.add_argument("-l", "--log_level", type=str, help="Set log level (INFO, DEBUG, WARNING, ERROR)",
                         required=False, default="INFO")
@@ -634,6 +635,9 @@ def copy_db():
     target_db = get_target_db()
     dump_file = export_db(source_db=source_db, password=password)
     prepare_dump(source_db=source_db, target_db=target_db, dump_file=dump_file)
+    drop_target_db(target_db=target_db, password=password)
+    create_database(target_db=target_db, password=password)
+    change_owner(target_db=target_db, password=password)
     import_db(target_db=target_db, password=password, dump_file=dump_file)
     logging.warning("\n"
                     "Source database - \"%s\", \tTarget database - \"%s\"\n"
