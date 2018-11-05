@@ -623,7 +623,7 @@ def prepare_dump(source_db, target_db, dump_file):
 
 
 def change_owner(target_db, password):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost'; FLUSH PRIVILEGES;'"
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost';GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cumnsee.com'; FLUSH PRIVILEGES;'"
     logging.debug("drop_target_db.cmd - %s", cmd)
     global CHANGE_OWNER_FILE
     CHANGE_OWNER_FILE = execute_command_in_bash(command=cmd)
