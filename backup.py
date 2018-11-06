@@ -276,11 +276,11 @@ def print_exists_backups(backups):
 
 
 def __read_stdin():
-    _stdin = sys.stdin.readline()
+    _stdin: str = sys.stdin.readline()
     if _stdin[len(_stdin) - 1] == "\n":
-        return _stdin[:-1]
+        return _stdin.strip()[:-1]
     else:
-        return _stdin
+        return _stdin.strip()
 
 
 def select_exists_backups(existed):
@@ -576,25 +576,48 @@ def read_password_from_stdin():
     return __read_stdin()
 
 
-def get_source_db():
+def get_source_db_name():
     logging.info("Enter name of source DB:")
     return __read_stdin()
 
 
-def get_target_db():
-    logging.info("Enter name of target DB:")
+def get_target_db_name():
+    logging.info("Enter name of target DB name:")
+    return __read_stdin()
+
+
+def get_target_db_port():
+    logging.info("Enter name of target DB port:")
+    return __read_stdin()
+
+
+def get_target_db_host():
+    logging.info("Enter name of target DB host:")
+    return __read_stdin()
+
+
+def get_target_db_user():
+    logging.info("Enter name of target DB user (root is recommended):")
+    return __read_stdin()
+
+
+def get_target_db_pass():
+    logging.info("Enter name of target DB password:")
     return __read_stdin()
 
 
 def drop_target_db(target_db, password):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='DROP DATABASE IF EXISTS {target_db};'"
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} " \
+          f"--password={password} --execute='DROP DATABASE IF EXISTS {target_db};'"
     logging.debug("drop_target_db.cmd - %s", cmd)
     global DROP_TARGET_DB
     DROP_TARGET_DB = execute_command_in_bash(command=cmd)
 
 
 def create_database(target_db, password):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} --execute='CREATE DATABASE IF NOT EXISTS {target_db} CHARACTER SET utf8 COLLATE utf8_unicode_ci;'"
+    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} " \
+          f"--password={password} " \
+          f"--execute='CREATE DATABASE IF NOT EXISTS {target_db} CHARACTER SET utf8 COLLATE utf8_unicode_ci;'"
     logging.debug("create_database.cmd - %s", cmd)
     global CREATE_TARGET_DB
     CREATE_TARGET_DB = execute_command_in_bash(command=cmd)
@@ -602,15 +625,21 @@ def create_database(target_db, password):
 
 def export_db(source_db, password):
     dump_file = f"/tmp/export_db_path_{generate_random_string()}.sql"
-    cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {source_db} --lock-tables=false --events --routines --triggers > {dump_file}"
+    cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} " \
+          f"--password={password} {source_db} --lock-tables=false --events --routines --triggers > {dump_file}"
     logging.debug("export_db.cmd - %s", cmd)
     global EXPORT_DB
     EXPORT_DB = execute_command_in_bash(command=cmd)
     return dump_file
 
 
-def import_db(target_db, password, dump_file):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} {target_db} < {dump_file}"
+def import_db(db_name, db_pass, dump_file, db_host="", db_port="", db_user=""):
+    if len(db_host) <= 0 and len(db_pass) <= 0 and len(db_port) <= 0 and len(db_user) <= 0:
+        cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} " \
+              f"--password={db_pass} {db_name} < {dump_file}"
+    else:
+        cmd = f"/usr/bin/mysql --user={db_user} --host={db_host} --port={db_port} " \
+              f"--password={db_pass} {db_name} < {dump_file}"
     logging.debug("import_db.cmd - %s", cmd)
     global IMPORT_DB
     IMPORT_DB = execute_command_in_bash(command=cmd)
@@ -622,21 +651,33 @@ def prepare_dump(source_db, target_db, dump_file):
     execute_command_in_bash(command=cmd)
 
 
-def change_owner(target_db, password):
-    cmd = f"/usr/bin/mysql --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} --password={password} " \
+def change_owner(db_name, db_pass, db_host="", db_port="", db_user=""):
+    if len(db_host) <= 0 and len(db_pass) <= 0 and len(db_port) <= 0 and len(db_user) <= 0:
+        db_user = MYSQL_USER
+        db_host = MYSQL_HOST
+        db_port = MYSQL_PORT
+    cmd = f"/usr/bin/mysql --user={db_user} --host={db_host} --port={db_port} --password={db_pass} " \
           f"--execute='" \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'localhost'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cumnsee.com'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'cpanel16004103.vultr.com'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'140.82.45.46'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'144.202.0.210'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee_admin'@'45.77.219.89'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'localhost'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'cumnsee.com'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'cpanel16004103.vultr.com'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'140.82.45.46'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'144.202.0.210'; " \
-          f"GRANT ALL PRIVILEGES ON {target_db}.* TO 'cumnsee'@'45.77.219.89'; " \
+          f"GRANT ALL ON `{db_name}`.* TO "  \
+          f"'cumnsee'@'cpanel16004103.vultr.com' IDENTIFIED BY PASSWORD '*69142CE7B8FB08FDB4E050CC541D4493931E5D0C', " \
+          f"'cumnsee'@'cumnsee.com' IDENTIFIED BY PASSWORD '*69142CE7B8FB08FDB4E050CC541D4493931E5D0C', " \
+          f"'cumnsee'@'144.202.0.210' IDENTIFIED BY PASSWORD '*69142CE7B8FB08FDB4E050CC541D4493931E5D0C', " \
+          f"'cumnsee'@'localhost' IDENTIFIED BY PASSWORD '*69142CE7B8FB08FDB4E050CC541D4493931E5D0C', " \
+          f"'cumnsee'@'45.77.219.89' IDENTIFIED BY PASSWORD '*69142CE7B8FB08FDB4E050CC541D4493931E5D0C'; " \
+          f"GRANT ALL ON `{db_name}`.* TO "\
+          f"'cumnsee'@'cpanel16004103.vultr.com' IDENTIFIED BY  'VirtualEscort995!', "\
+          f"'cumnsee'@'localhost' IDENTIFIED BY  'VirtualEscort995!', "\
+          f"'cumnsee'@'cumnsee.com' IDENTIFIED BY  'VirtualEscort995!'; " \
+          f"GRANT ALL ON `{db_name}`.* TO " \
+          f"'cumnsee_admin'@'localhost' IDENTIFIED BY PASSWORD '*077FA394F04DFDBC0BEBFD86024BF5D3188F2451', " \
+          f"'cumnsee_admin'@'cumnsee.com' IDENTIFIED BY PASSWORD '*077FA394F04DFDBC0BEBFD86024BF5D3188F2451', " \
+          f"'cumnsee_admin'@'cpanel16004103.vultr.com' IDENTIFIED BY PASSWORD '*077FA394F04DFDBC0BEBFD86024BF5D3188F2451', " \
+          f"'cumnsee_admin'@'144.202.0.210' IDENTIFIED BY PASSWORD '*077FA394F04DFDBC0BEBFD86024BF5D3188F2451', " \
+          f"'cumnsee_admin'@'45.77.219.89' IDENTIFIED BY PASSWORD '*077FA394F04DFDBC0BEBFD86024BF5D3188F2451'; " \
+          f"GRANT ALL ON `{db_name}`.* TO  " \
+          f"'cumnsee'@'localhost' IDENTIFIED BY  'VirtualEscort995!', " \
+          f"'cumnsee'@'cumnsee.com' IDENTIFIED BY  'VirtualEscort995!', " \
+          f"'cumnsee'@'cpanel16004103.vultr.com' IDENTIFIED BY  'VirtualEscort995!'; " \
           f"FLUSH PRIVILEGES;'"
     logging.debug("drop_target_db.cmd - %s", cmd)
     global CHANGE_OWNER_FILE
@@ -644,22 +685,35 @@ def change_owner(target_db, password):
 
 
 def copy_db():
-    password = read_password_from_stdin()
-    source_db = get_source_db()
-    target_db = get_target_db()
-    dump_file = export_db(source_db=source_db, password=password)
-    prepare_dump(source_db=source_db, target_db=target_db, dump_file=dump_file)
-    drop_target_db(target_db=target_db, password=password)
-    create_database(target_db=target_db, password=password)
-    change_owner(target_db=target_db, password=password)
-    import_db(target_db=target_db, password=password, dump_file=dump_file)
+    source_db = get_source_db_name()
+    target_db_host = get_target_db_host()
+    target_db_port = get_target_db_port()
+    target_db_name = get_target_db_name()
+    target_db_user = get_target_db_user()
+    target_db_pass = get_target_db_pass()
+    dump_file = export_db(source_db=source_db, password=target_db_pass)
+    prepare_dump(source_db=source_db, target_db=target_db_name, dump_file=dump_file)
+    drop_target_db(target_db=target_db_name, password=target_db_pass)
+    create_database(target_db=target_db_name, password=target_db_pass)
+    change_owner(db_host=target_db_host,
+                 db_port=target_db_port,
+                 db_user=target_db_user,
+                 db_name=target_db_name,
+                 db_pass=target_db_pass)
+    import_db(db_host=target_db_host,
+              db_port=target_db_port,
+              db_user=target_db_user,
+              db_name=target_db_name,
+              db_pass=target_db_pass,
+              dump_file=dump_file
+              )
     logging.warning("\n"
                     "Source database - \"%s\", \tTarget database - \"%s\"\n"
                     "Verify that new copy is work properly!\n"
                     "Remove next file:\n"
                     "\tExport source DB script - %s\n"
                     "\tImport source DB script - %s\n"
-                    "\tDump file - %s", source_db, target_db, EXPORT_DB, IMPORT_DB,
+                    "\tDump file - %s", source_db, target_db_name, EXPORT_DB, IMPORT_DB,
                     dump_file)
     logging.info("Done")
 
