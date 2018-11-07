@@ -685,14 +685,15 @@ def change_owner(db_name, db_pass, db_host="", db_port="", db_user=""):
 
 
 def copy_db():
-    source_db = get_source_db_name()
+    source_db_pass = read_password_from_stdin()
+    source_db_name = get_source_db_name()
     target_db_host = get_target_db_host()
     target_db_port = get_target_db_port()
     target_db_name = get_target_db_name()
     target_db_user = get_target_db_user()
     target_db_pass = get_target_db_pass()
-    dump_file = export_db(source_db=source_db, password=target_db_pass)
-    prepare_dump(source_db=source_db, target_db=target_db_name, dump_file=dump_file)
+    dump_file = export_db(source_db=source_db_name, password=source_db_pass)
+    prepare_dump(source_db=source_db_name, target_db=target_db_name, dump_file=dump_file)
     drop_target_db(target_db=target_db_name, password=target_db_pass)
     create_database(target_db=target_db_name, password=target_db_pass)
     change_owner(db_host=target_db_host,
