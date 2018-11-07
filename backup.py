@@ -580,43 +580,174 @@ def read_password_from_stdin():
 
 def get_source_db_name():
     logging.info("Enter name of source DB:")
-    return __read_stdin()
+    name = __read_stdin()
+    if len(name) != 0:
+        return name
+    else:
+        logging.error("Database name can not be empty. Please, try again!")
+        get_source_db_name()
 
 
-def get_backup_folder():
+def get_target_db_host():
+    logging.info("Enter database host to import dump to database (if empty will use host \"127.0.0.1\", "
+                 "ie \"localhost\"):")
+    val = __read_stdin()
+    if len(val) == 0:
+        return "127.0.0.1"
+    else:
+        return val
+
+
+def get_target_db_port():
+    logging.info("Enter database port to import dump to database (if empty will use port \"3306\"):")
+    val = __read_stdin()
+    if len(val) == 0:
+        return "3306"
+    else:
+        return val
+
+
+def get_target_db_user():
+    logging.info("Enter database user to import dump to database (if empty will use user \"root\"):")
+    val = __read_stdin()
+    if len(val) == 0:
+        return "root"
+    else:
+        return val
+
+
+def get_target_db_pass():
+    logging.info("Enter user's password to import dump to database:")
+    val = __read_stdin()
+    if len(val) != 0:
+        return val
+    else:
+        logging.error("Database name can not be empty. Please, try again!")
+        get_target_db_pass()
+
+
+def get_target_db_name():
+    logging.info("Enter name of target DB:")
+    val = __read_stdin()
+    if len(val) != 0:
+        return val
+    else:
+        logging.error("Database name can not be empty. Please, try again!")
+        get_target_db_name()
+
+
+def get_export_folder():
     logging.info("Enter dump folder name:")
     destination_folder = __read_stdin()
     logging.debug("destination folder - %s", destination_folder)
     if os.path.isdir(destination_folder) and os.path.exists(destination_folder):
-        return destination_folder
+        if destination_folder is not None:
+            return destination_folder
     else:
         logging.error("Folder name is empty or folder does not exists!")
-        get_backup_folder()
+        get_export_folder()
 
 
-def export_db(db_name, db_pass, destination_folder):
+def export_db(db_name, db_pass, destination_folder=""):
+    if len(destination_folder) == 0:
+        destination_folder = "/tmp"
+
     dump_file = f"{destination_folder}/{db_name}_{datetime_in_custom_format()}.sql.gz"
     cmd = f"/usr/bin/mysqldump --user={MYSQL_USER} --host={MYSQL_HOST} --port={MYSQL_PORT} " \
-          f"--password={db_pass} {db_name} --lock-tables=false " \
-          f"--events --routines --triggers | gzip > {dump_file}"
+          f"--password={db_pass} --lock-tables=false " \
+          f"--events --routines --triggers {db_name} | gzip > {dump_file}"
     logging.debug("export_db.cmd - %s", cmd)
-    global EXPORT_DB
-    EXPORT_DB = execute_command_in_bash(command=cmd)
-    return dump_file
+    return dump_file, execute_command_in_bash(command=cmd)
+
+
+def import_db(db_name, db_pass, dump_file, db_host="", db_port="", db_user=""):
+    if len(db_host) == 0 and len(db_port) == 0 and len(db_user) <= 0:
+        db_host = MYSQL_HOST
+        db_port = MYSQL_PORT
+        db_user = MYSQL_USER
+
+    cmd = f"zcat {dump_file} | " \
+          f"/usr/bin/mysql --user={db_user} --host={db_host} --port={db_port} --password={db_pass} {db_name}"
+    logging.debug("import_db.cmd - %s", cmd)
+    return execute_command_in_bash(command=cmd)
 
 
 def copy_db():
-    source_db_pass = read_password_from_stdin()
-    source_db_name = get_source_db_name()
-    destination_folder = get_backup_folder()
-    dump_file = export_db(db_name=source_db_name, db_pass=source_db_pass, destination_folder=destination_folder)
-    logging.warning("\n"
-                    "Source database - \"%s\"\n"
-                    "Verify that new copy is work properly!\n"
-                    "Remove next file:\n"
-                    "\tExport source DB script - %s\n"
-                    "\tDump file - %s", source_db_name, EXPORT_DB, dump_file)
-    logging.info("Done")
+    password = read_password_from_stdin()
+    source_db = get_source_db_name()
+    target_db = get_target_db_name()
+    print(f"Database \"{source_db}\" will copy to \"{target_db}\"\n"
+          f"Verify that database \"{target_db}\" exists on server!")
+    print(f"Are you ready to continue? Y(yes) or N(no)")
+    answer = __read_stdin().lower()
+    if answer in ("y", "yes"):
+        dump_file, export_db_sh = export_db_to_file(db_name=source_db, db_pass=password)
+        import_db_sh = import_db(db_name=target_db, db_pass=password, dump_file=dump_file)
+        logging.warning("\n"
+                        "Source database - \"%s\"; \nTarget database - \"%s\"\n"
+                        "Verify that new copy is work properly!\n"
+                        "Remove next file:\n"
+                        "\tExport source DB script - %s\n"
+                        "\tImport source DB script - %s\n"
+                        "\tDump file - %s", source_db, target_db, export_db_sh, import_db_sh,
+                        dump_file)
+    else:
+        logging.info("Bye!")
+
+
+def get_dump_file():
+    logging.info("Enter full path to dump file")
+    dump_file = __read_stdin()
+    if os.path.exists(dump_file):
+        return dump_file
+    else:
+        logging.error("Can not find dump file, please try again!")
+        get_dump_file()
+
+
+def import_db_from_file():
+    dump_file = get_dump_file()
+    db_host = get_target_db_host()
+    db_port = get_target_db_port()
+    db_name = get_target_db_name()
+    db_user = get_target_db_user()
+    db_pass = get_target_db_pass()
+    print(f"To import database from file \"{dump_file}\" with next credentials:\n"
+          f"\tDB Host: {db_host}\n"
+          f"\tDB Port: {db_port}\n"
+          f"\tDB Name: {db_name}\n"
+          f"\tDB User: {db_user}\n"
+          f"\tDB Password: {db_pass}")
+    print(f"Verify that database \"{db_name}\" exists on server!")
+    print(f"Verify that user \"{db_user}\" can create tables in database \"{db_name}\"!")
+    print(f"Are you ready to import? Y(yes) or N(no)")
+    answer = __read_stdin().lower()
+    if answer in ("y", "yes"):
+        logging.info("Start import file %s to database %s", dump_file, db_name)
+        import_sh = import_db(db_host=db_host,
+                              db_port=db_port,
+                              db_name=db_name,
+                              db_user=db_user,
+                              db_pass=db_pass,
+                              dump_file=dump_file)
+        logging.warning(f"\n\nVerify that database imported successful and remove next files:\n"
+                        f"\tImport shell script - {import_sh}\n"
+                        f"\tDump file - {dump_file}")
+    else:
+        logging.info("Bye!")
+
+
+def export_db_to_file(db_name="", db_pass=""):
+    if len(db_name) == 0 and len(db_pass) == 0:
+        db_pass = read_password_from_stdin()
+        db_name = get_source_db_name()
+        export_dir = get_export_folder()
+        dump_file, sh = export_db(db_name=db_name, db_pass=db_pass, destination_folder=export_dir)
+        logging.warning(f"\n"
+                        f"\tDump file saved - {dump_file}\n"
+                        f"\tShell script to make dump - {sh}")
+        return dump_file, sh
+    return export_db(db_name=db_name, db_pass=db_pass)
 
 
 if __name__ == '__main__':
@@ -656,5 +787,11 @@ if __name__ == '__main__':
     elif args.action == "copy":
         logging.info("Start COPY one database to another one")
         copy_db()
+    elif args.action == "export":
+        logging.info("Start export database to file")
+        export_db_to_file()
+    elif args.action == "import":
+        logging.info("Start import database from file")
+        import_db_from_file()
     else:
         logging.error("Action \"%s\" does not support", args.action)
