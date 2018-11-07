@@ -53,10 +53,15 @@ def datetime_in_custom_format():
 
 def read_args():
     parser = argparse.ArgumentParser(description="Tool to create MySQL backup and restore it. "
-                                                 "Supported actions - backup, restore and copy")
-    parser.add_argument("-a", "--action", type=str, help="Script action backup or restore", required=True)
-    parser.add_argument("-l", "--log_level", type=str, help="Set log level (INFO, DEBUG, WARNING, ERROR)",
+                                                 "Supported actions - backup, restore, copy, export "
+                                                 "and import databases.")
+    parser.add_argument("-a", "--action", type=str, help="Script action. Supported next operations: "
+                                                         "backup, restore, copy, export and import.", required=True)
+    parser.add_argument("-l", "--log_level", type=str, help="Set log level (INFO, DEBUG, WARNING, ERROR).",
                         required=False, default="INFO")
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args()
 
 
@@ -766,11 +771,11 @@ if __name__ == '__main__':
     MYSQL_DB_PATH_NEW = None
     RENAME_RESTORED_BACKUP_NEW = None
 
-    if args.action == "backup":
+    if args.action.lower() == "backup":
         logging.info("We are going to do database backup")
         do_backup()
         remove_old_backup()
-    elif args.action == "restore":
+    elif args.action.lower() == "restore":
         logging.info("We are going to do database restore")
         restore_databases()
         logging.warning(f"\n"
@@ -784,13 +789,13 @@ if __name__ == '__main__':
                         "Folder with previous full backup (before restoration) - %s",
                         APPLY_BIN_LOG_FILE, PURGE_BINARY_LOGS_FILE, CONVERTED_BINFILES_SQL, MYSQL_DB_PATH_NEW,
                         RENAME_RESTORED_BACKUP_NEW)
-    elif args.action == "copy":
+    elif args.action.lower() == "copy":
         logging.info("Start COPY one database to another one")
         copy_db()
-    elif args.action == "export":
+    elif args.action.lower() == "export":
         logging.info("Start export database to file")
         export_db_to_file()
-    elif args.action == "import":
+    elif args.action.lower() == "import":
         logging.info("Start import database from file")
         import_db_from_file()
     else:
