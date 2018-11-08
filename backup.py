@@ -627,7 +627,7 @@ def get_target_db_pass():
     if len(val) != 0:
         return val
     else:
-        logging.error("Database name can not be empty. Please, try again!")
+        logging.error("User's password can not be empty. Please, try again!")
         get_target_db_pass()
 
 
@@ -644,11 +644,11 @@ def get_target_db_name():
 def get_target_db_key():
     logging.info("Enter new key (16 characters length):")
     val = __read_stdin()
-    if len(val) != 16:
+    if len(val) == 16:
         return val
     else:
         logging.error("Key length should be equal 16 characters. Please, try again!")
-        get_target_db_name()
+        get_target_db_key()
 
 
 def choose_procedure_to_execute():
@@ -660,7 +660,7 @@ def choose_procedure_to_execute():
         return val
     else:
         logging.error("You can use only 1 or 2 to choose procedure. Please, try again!")
-        get_target_db_name()
+        choose_procedure_to_execute()
 
 
 def get_export_folder():
