@@ -766,7 +766,7 @@ def import_db_from_file():
           f"\tDB Name: {db_name}\n"
           f"\tDB User: {db_user}\n"
           f"\tDB Password: {db_pass}\n"
-          f"\tNew key: {db_key}")
+          f"\tDatabase key: {db_key}")
     print(f"Verify that database \"{db_name}\" exists on server!")
     print(f"Verify that user \"{db_user}\" can create tables in database \"{db_name}\"!")
     print(f"Are you ready to import? Y(yes) or N(no)")
