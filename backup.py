@@ -651,18 +651,6 @@ def get_target_db_key():
         get_target_db_key()
 
 
-def choose_procedure_to_execute():
-    logging.info("Choose procedure to execute after import database:\n"
-                 "\t1 - ProductionToTest\n"
-                 "\t2 - TestToProduction")
-    val = __read_stdin()
-    if len(val) != 0 and val in ("1", "2"):
-        return val
-    else:
-        logging.error("You can use only 1 or 2 to choose procedure. Please, try again!")
-        choose_procedure_to_execute()
-
-
 def get_export_folder():
     logging.info("Enter dump folder name:")
     destination_folder = __read_stdin()
@@ -732,14 +720,12 @@ def get_dump_file():
         get_dump_file()
 
 
-def execute_procedure(db_host, db_port, db_name, db_user, db_pass, db_key, procedure_id):
+def execute_procedure(db_host, db_port, db_name, db_user, db_pass, db_key, procedure_id="1"):
     def __make_call_sql():
         f_name = f"/tmp/{generate_random_string()}.sql"
         with open(f_name, "w") as f:
             if procedure_id == "1":
                 f.write(f"CALL ProductionToTest('{db_key}');")
-            elif procedure_id == "2":
-                f.write(f"CALL TestToProduction('{db_key}');")
             else:
                 logging.error("Unknown procedure - exit")
                 exit(1)
@@ -759,7 +745,6 @@ def import_db_from_file():
     db_user = get_target_db_user()
     db_pass = get_target_db_pass()
     db_key = get_target_db_key()
-    procedure_id = choose_procedure_to_execute()
     print(f"To import database from file \"{dump_file}\" with next credentials:\n"
           f"\tDB Host: {db_host}\n"
           f"\tDB Port: {db_port}\n"
@@ -784,8 +769,7 @@ def import_db_from_file():
                                           db_name=db_name,
                                           db_user=db_user,
                                           db_pass=db_pass,
-                                          db_key=db_key,
-                                          procedure_id=procedure_id)
+                                          db_key=db_key)
         logging.warning(f"\n\nVerify that database imported successful and remove next files:\n"
                         f"\tImport shell script - {import_sh}\n"
                         f"\tDump file - {dump_file}\n"
