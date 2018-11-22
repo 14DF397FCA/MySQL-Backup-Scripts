@@ -44,7 +44,7 @@ MYSQL_USER = "root"
 # Configuration of backup script end
 
 
-BACKUP_TOOL = "/usr/bin/xtrabackup"
+BACKUP_TOOL = "/usr/bin/mariabackup"
 
 
 def datetime_in_custom_format():
@@ -119,7 +119,7 @@ def is_backup_done(full: bool, path):
         t = "backup_type = full-backuped"
     else:
         t = "backup_type = incremental"
-    logging.debug("Сheck for a backup state")
+    logging.debug("Check for a backup state")
     info = f"{path}/xtrabackup_checkpoints"
     if os.path.exists(info) is False:
         logging.debug("File %s not found")
@@ -642,7 +642,7 @@ def get_target_db_name():
 
 
 def get_target_db_key():
-    logging.info("Enter new key (16 characters length):")
+    logging.info("Enter current database key (16 characters length):")
     val = __read_stdin()
     if len(val) == 16:
         return val
